@@ -83,6 +83,7 @@ function normCat(c) {
   return CAT_ALIAS[c.toLowerCase()] || c;
 }
 
+let anthropicKey = sessionStorage.getItem('bakebok_akey') || null;
 let token = sessionStorage.getItem('bakebok_token') || null;
 let folderId = null;
 let recipes = [];
@@ -176,6 +177,12 @@ function settingsView() {
       <button class="btn" onclick="document.getElementById('cover-input').click()">Last opp forsidebilde</button>
       ${statusMsg ? `<p class="status">${statusMsg}</p>` : ''}
     </div>` : ''}
+    <div class="card">
+      <p style="font-weight:500;margin-bottom:8px">Claude API-nøkkel</p>
+      <p class="muted" style="margin-bottom:8px">Brukes til å lese oppskrifter fra bilder.</p>
+      <input type="password" id="akey-input" value="${anthropicKey||''}" placeholder="sk-ant-...">
+      <button class="btn-primary" style="margin-top:10px" onclick="saveApiKey()">Lagre nøkkel</button>
+    </div>
     <div class="info-box">Redirect URI:<code>${REDIRECT_URI}</code></div>`;
 }
 
@@ -223,6 +230,17 @@ function editView() {
       <label>Notater / justeringer</label><textarea id="e-notes" rows="3">${v.notes}</textarea>
     </div>
     <div class="card">
+      <p style="font-weight:500;margin-bottom:8px">Scan oppskrift fra bilde</p>
+      <p class="muted" style="margin-bottom:8px">Ta bilde av en oppskrift – Claude leser den og fyller inn feltene automatisk.</p>
+      <input type="file" id="scan-input" accept="image/*" style="display:none">
+      <input type="file" id="scan-cam" accept="image/*" capture="environment" style="display:none">
+      <div class="gap">
+        <button class="btn" style="flex:1" onclick="document.getElementById('scan-cam').click()">📷 Ta bilde</button>
+        <button class="btn" style="flex:1" onclick="document.getElementById('scan-input').click()">🖼 Last opp</button>
+      </div>
+      ${statusMsg && statusMsg.includes('scan') ? `<p class="status">${statusMsg}</p>` : ''}
+    </div>
+    <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Bilder av resultatet</p>
       ${imgs}
       <input type="file" id="img-input" accept="image/*" style="display:none">
@@ -232,9 +250,6 @@ function editView() {
         <button class="btn" style="flex:1" onclick="document.getElementById('img-input').click()">🖼 Last opp</button>
       </div>
     </div>
-    ${statusMsg ? `<p class="status">${statusMsg}</p>` : ''}
-    <button class="btn-primary" style="width:100%;margin-top:4px" onclick="handleSave()" ${loading?'disabled':''}>
-      ${loading?'Lagrer...':'Lagre oppskrift'}</button>`;
 }
 
 function saveFormState() {
@@ -262,6 +277,8 @@ async function handleImageFile(file) {
 function bindEdit() {
   document.getElementById('img-input').addEventListener('change', e => handleImageFile(e.target.files[0]));
   document.getElementById('cam-input').addEventListener('change', e => handleImageFile(e.target.files[0]));
+  document.getElementById('scan-input').addEventListener('change', e => scanRecipe(e.target.files[0]));
+  document.getElementById('scan-cam').addEventListener('change', e => scanRecipe(e.target.files[0]));
 }
 
 function bindSettings() {
