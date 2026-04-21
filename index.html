@@ -142,8 +142,7 @@ function homeView() {
       const thumb = r.versions.find(v => v.images && v.images.length > 0)?.images[0] || null;
       return `<div class="card card-clickable" onclick="openRecipe('${r.id}')" style="display:flex;align-items:center;gap:12px">
         <div style="flex:1;min-width:0">
-          <div class="row"><p style="font-weight:500">${r.name}</p>
-          <span class="muted">${r.versions.length} versjon${r.versions.length>1?'er':''}</span></div>
+          <div class="row"><p style="font-weight:500">${r.name}</p></div>
           <p class="muted">Sist oppdatert ${fmt(r.versions[0].date)}</p>
         </div>
         ${thumb ? `<img src="${thumb}" style="width:56px;height:56px;border-radius:8px;object-fit:cover;flex-shrink:0">` : ''}
