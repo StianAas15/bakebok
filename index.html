@@ -105,8 +105,8 @@ function render() {
 
 function homeView() {
   const hero = coverImageUrl
-    ? `<div class="hero"><img src="${coverImageUrl}" alt="Forsidebilde"></div>`
-    : `<div class="hero-placeholder">🍞</div>`;
+    ? `<div class="hero" onclick="goHome()" style="cursor:pointer"><img src="${coverImageUrl}" alt="Forsidebilde"></div>`
+    : `<div class="hero-placeholder" onclick="goHome()" style="cursor:pointer">🍞</div>`;
 
   if (!token) return `
     ${hero}
@@ -182,7 +182,9 @@ function recipeView() {
   return `
     <div class="topbar"><button class="btn" onclick="backFromRecipe()">← Tilbake</button>
     <div class="gap"><button class="btn" onclick="addVersion()">+ Versjon</button>
-    <button class="btn" onclick="startEdit()">Rediger</button></div></div>
+    <button class="btn" onclick="startEdit()">Rediger</button>
+    <button class="btn" style="color:#c0392b;border-color:#c0392b" onclick="confirmDelete()">Slett</button>
+    </div></div>
     <p class="muted" style="margin-bottom:4px">${catName}</p>
     <h2 style="margin-bottom:12px">${r.name}</h2>
     ${tabs}${imgs}
@@ -213,8 +215,13 @@ function editView() {
     </div>
     <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Bilder av resultatet</p>
-      ${imgs}<input type="file" id="img-input" accept="image/*" style="display:none">
-      <button class="btn" onclick="document.getElementById('img-input').click()">+ Last opp bilde</button>
+      ${imgs}
+      <input type="file" id="img-input" accept="image/*" style="display:none">
+      <input type="file" id="cam-input" accept="image/*" capture="environment" style="display:none">
+      <div class="gap">
+        <button class="btn" style="flex:1" onclick="document.getElementById('cam-input').click()">📷 Ta bilde</button>
+        <button class="btn" style="flex:1" onclick="document.getElementById('img-input').click()">🖼 Last opp</button>
+      </div>
     </div>
     ${statusMsg ? `<p class="status">${statusMsg}</p>` : ''}
     <button class="btn-primary" style="width:100%;margin-top:4px" onclick="handleSave()" ${loading?'disabled':''}>
@@ -234,15 +241,18 @@ function saveFormState() {
   if (nt) editData.versions[0].notes = nt.value;
 }
 
+async function handleImageFile(file) {
+  if (!file) return;
+  saveFormState();
+  setStatus('Laster opp bilde...');
+  const url = await uploadImage(file);
+  editData.versions[0].images = [...(editData.versions[0].images||[]), url];
+  setStatus(''); render();
+}
+
 function bindEdit() {
-  document.getElementById('img-input').addEventListener('change', async e => {
-    const file = e.target.files[0]; if (!file) return;
-    saveFormState();
-    setStatus('Laster opp bilde...');
-    const url = await uploadImage(file);
-    editData.versions[0].images = [...(editData.versions[0].images||[]), url];
-    setStatus(''); render();
-  });
+  document.getElementById('img-input').addEventListener('change', e => handleImageFile(e.target.files[0]));
+  document.getElementById('cam-input').addEventListener('change', e => handleImageFile(e.target.files[0]));
 }
 
 function bindSettings() {
@@ -263,7 +273,25 @@ function openRecipe(id) { selected = id; selectedVersion = 0; view = 'recipe'; r
 function selVer(i) { selectedVersion = i; render(); }
 function setStatus(s) { statusMsg = s; render(); }
 function selectCat(id) { activeCategory = id; render(); }
+function goHome() { activeCategory = null; view = 'home'; render(); }
 function backFromRecipe() { view = 'home'; render(); }
+
+async function confirmDelete() {
+  const r = recipes.find(x => x.id === selected);
+  if (!r) return;
+  if (!confirm(`Vil du slette "${r.name}"? Dette kan ikke angres.`)) return;
+  await deleteRecipe(r);
+  view = 'home'; render();
+}
+
+async function deleteRecipe(recipe) {
+  setStatus('Sletter...');
+  const existing = await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='${recipe.id}.json' and trashed=false&fields=files(id)`);
+  const fileId = existing.files?.[0]?.id;
+  if (fileId) await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+  await loadRecipes();
+  setStatus('');
+}
 
 function signIn() {
   const params = new URLSearchParams({ client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, response_type: 'token', scope: SCOPE, prompt: 'consent' });
