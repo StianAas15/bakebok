@@ -286,11 +286,32 @@ function signOut() {
   render();
 }
 
-function saveApiKey() {
-  const k = document.getElementById('akey-input').value.trim();
-  if (k) { anthropicKey=k; sessionStorage.setItem('bakebok_akey',k); }
+async function loadApiKey() {
+  const list=await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='apikey.txt' and trashed=false&fields=files(id)`);
+  if(list.files?.[0]?.id){
+    const r=await fetch(`https://www.googleapis.com/drive/v3/files/${list.files[0].id}?alt=media`,{headers:{Authorization:`Bearer ${token}`}});
+    const key=await r.text();
+    if(key) { anthropicKey=key.trim(); sessionStorage.setItem('bakebok_akey',anthropicKey); }
+  }
+}
+
+async function saveApiKey() {
+  const k=document.getElementById('akey-input').value.trim();
+  if(!k){setStatus('Lim inn en API-nøkkel først.');return;}
+  anthropicKey=k;
+  sessionStorage.setItem('bakebok_akey',k);
+  const list=await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='apikey.txt' and trashed=false&fields=files(id)`);
+  const fileId=list.files?.[0]?.id;
+  const blob=new Blob([k],{type:'text/plain'});
+  const form=new FormData();
+  form.append('metadata',new Blob([JSON.stringify(fileId?{}:{name:'apikey.txt',parents:[folderId]})],{type:'application/json'}));
+  form.append('file',blob);
+  await fetch(fileId
+    ?`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
+    :'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+    {method:fileId?'PATCH':'POST',headers:{Authorization:`Bearer ${token}`},body:form});
   setStatus('API-nøkkel lagret!');
-  setTimeout(()=>{ statusMsg=''; render(); }, 2000);
+  setTimeout(()=>{statusMsg='';render();},2000);
 }
 
 function saveFormState() {
@@ -408,6 +429,7 @@ async function initDrive() {
   }
   folderId=fid;
   await loadCoverImage();
+  await loadApiKey();
   await loadRecipes();
   loading=false; statusMsg=''; render();
 }
