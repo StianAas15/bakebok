@@ -80,18 +80,18 @@ const CAT_ALIAS = {
 function normCat(c) { return c ? (CAT_ALIAS[c.toLowerCase()] || c) : ''; }
 function fmt(iso) { return new Date(iso).toLocaleDateString('nb-NO',{day:'2-digit',month:'short',year:'numeric'}); }
 
-let token        = sessionStorage.getItem('bakebok_token') || null;
-let anthropicKey = sessionStorage.getItem('bakebok_akey')  || null;
-let coverImageUrl= sessionStorage.getItem('bakebok_cover') || null;
-let folderId     = null;
-let coverFileId  = null;
-let recipes      = [];
-let view         = 'home';
-let selected     = null;
+let token         = sessionStorage.getItem('bakebok_token') || null;
+let anthropicKey  = sessionStorage.getItem('bakebok_akey')  || null;
+let coverImageUrl = sessionStorage.getItem('bakebok_cover') || null;
+let folderId      = null;
+let coverFileId   = null;
+let recipes       = [];
+let view          = 'home';
+let selected      = null;
 let selectedVersion = 0;
-let editData     = null;
-let loading      = false;
-let statusMsg    = '';
+let editData      = null;
+let loading       = false;
+let statusMsg     = '';
 let activeCategory = null;
 
 function render() {
@@ -102,7 +102,6 @@ function render() {
   else                          { app.innerHTML = homeView(); }
 }
 
-/* ---- VIEWS ---- */
 function homeView() {
   const hero = coverImageUrl
     ? `<div class="hero" onclick="goHome()"><img src="${coverImageUrl}" alt="Forsidebilde"></div>`
@@ -209,7 +208,6 @@ function editView() {
   return `
     <div class="topbar"><button class="btn" onclick="setView('home')">← Avbryt</button></div>
     <h2>${editData.name||'Ny oppskrift'}</h2>
-
     <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Scan oppskrift fra bilde</p>
       <p class="muted" style="margin-bottom:10px">Ta bilde av en oppskrift – Claude leser den og fyller inn feltene automatisk.</p>
@@ -220,7 +218,6 @@ function editView() {
         <button class="btn" style="flex:1" onclick="document.getElementById('scan-input').click()">🖼 Last opp</button>
       </div>
     </div>
-
     <div class="card">
       <label>Navn</label><input id="e-name" value="${editData.name}" placeholder="F.eks. Surdeigsbaguetter">
       <label>Kategori</label>
@@ -247,7 +244,6 @@ function editView() {
       ${loading?'Lagrer...':'Lagre oppskrift'}</button>`;
 }
 
-/* ---- BIND ---- */
 function bindEdit() {
   document.getElementById('img-input').addEventListener('change', e => handleImageFile(e.target.files[0]));
   document.getElementById('cam-input').addEventListener('change', e => handleImageFile(e.target.files[0]));
@@ -268,7 +264,6 @@ function bindSettings() {
   });
 }
 
-/* ---- ACTIONS ---- */
 function setView(v) { view=v; statusMsg=''; render(); }
 function goHome() { activeCategory=null; view='home'; render(); }
 function openRecipe(id) { selected=id; selectedVersion=0; view='recipe'; render(); }
@@ -287,47 +282,27 @@ function signOut() {
   render();
 }
 
-async function getEncKey(password) {
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
-  return crypto.subtle.deriveKey(
-    { name:'PBKDF2', salt:enc.encode('bakebok-salt'), iterations:100000, hash:'SHA-256' },
-    keyMaterial, { name:'AES-GCM', length:256 }, false, ['encrypt','decrypt']
-  );
-}
-
-async function encryptText(text, password) {
-  const key = await getEncKey(password);
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const enc = new TextEncoder();
-  const encrypted = await crypto.subtle.encrypt({name:'AES-GCM',iv}, key, enc.encode(text));
-  const buf = new Uint8Array(iv.byteLength + encrypted.byteLength);
-  buf.set(iv, 0); buf.set(new Uint8Array(encrypted), iv.byteLength);
-  return btoa(String.fromCharCode(...buf));
-}
-
-async function decryptText(b64, password) {
-  const buf = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-  const iv = buf.slice(0, 12);
-  const data = buf.slice(12);
-  const key = await getEncKey(password);
-  const dec = await crypto.subtle.decrypt({name:'AES-GCM',iv}, key, data);
-  return new TextDecoder().decode(dec);
+async function loadApiKey() {
+  try {
+    const list = await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='apikey.txt' and trashed=false&fields=files(id)`);
+    if (list.files?.[0]?.id) {
+      const r = await fetch(`https://www.googleapis.com/drive/v3/files/${list.files[0].id}?alt=media`, {headers:{Authorization:`Bearer ${token}`}});
+      const key = await r.text();
+      if (key) { anthropicKey=key.trim(); sessionStorage.setItem('bakebok_akey', anthropicKey); }
+    }
+  } catch(e) {}
 }
 
 async function saveApiKey() {
   const k = document.getElementById('akey-input').value.trim();
-  const p = document.getElementById('enc-password').value.trim();
-  if (!k) { setStatus('Lim inn API-nøkkelen.'); return; }
-  if (!p) { setStatus('Velg et krypteringspassord.'); return; }
+  if (!k) { setStatus('Lim inn en API-nøkkel først.'); return; }
   setStatus('Lagrer nøkkel...');
   try {
-    const encrypted = await encryptText(k, p);
     anthropicKey = k;
     sessionStorage.setItem('bakebok_akey', k);
     const list = await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='apikey.txt' and trashed=false&fields=files(id)`);
     const fileId = list.files?.[0]?.id;
-    const blob = new Blob([encrypted], {type:'text/plain'});
+    const blob = new Blob([k], {type:'text/plain'});
     const form = new FormData();
     form.append('metadata', new Blob([JSON.stringify(fileId?{}:{name:'apikey.txt',parents:[folderId]})], {type:'application/json'}));
     form.append('file', blob);
@@ -335,52 +310,9 @@ async function saveApiKey() {
       ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
       : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
       {method:fileId?'PATCH':'POST', headers:{Authorization:`Bearer ${token}`}, body:form});
-    setStatus('API-nøkkel lagret og kryptert!');
+    setStatus('API-nøkkel lagret!');
     setTimeout(()=>{statusMsg='';render();}, 2000);
   } catch(e) { setStatus('Feil ved lagring.'); }
-}
-
-async function unlockApiKey() {
-  const p = document.getElementById('unlock-password').value.trim();
-  if (!p) { setStatus('Skriv inn passordet ditt.'); return; }
-  setStatus('Låser opp...');
-  try {
-    const list = await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='apikey.txt' and trashed=false&fields=files(id)`);
-    if (!list.files?.[0]?.id) { setStatus('Ingen lagret nøkkel funnet.'); return; }
-    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${list.files[0].id}?alt=media`, {headers:{Authorization:`Bearer ${token}`}});
-    const encrypted = await r.text();
-    const key = await decryptText(encrypted, p);
-    anthropicKey = key;
-    sessionStorage.setItem('bakebok_akey', key);
-    setStatus('Nøkkel låst opp!');
-    setTimeout(()=>{statusMsg='';render();}, 2000);
-  } catch(e) { setStatus('Feil passord eller ingen nøkkel funnet.'); }
-}
-  const list=await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='apikey.txt' and trashed=false&fields=files(id)`);
-  if(list.files?.[0]?.id){
-    const r=await fetch(`https://www.googleapis.com/drive/v3/files/${list.files[0].id}?alt=media`,{headers:{Authorization:`Bearer ${token}`}});
-    const key=await r.text();
-    if(key) { anthropicKey=key.trim(); sessionStorage.setItem('bakebok_akey',anthropicKey); }
-  }
-}
-
-async function saveApiKey() {
-  const k=document.getElementById('akey-input').value.trim();
-  if(!k){setStatus('Lim inn en API-nøkkel først.');return;}
-  anthropicKey=k;
-  sessionStorage.setItem('bakebok_akey',k);
-  const list=await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='apikey.txt' and trashed=false&fields=files(id)`);
-  const fileId=list.files?.[0]?.id;
-  const blob=new Blob([k],{type:'text/plain'});
-  const form=new FormData();
-  form.append('metadata',new Blob([JSON.stringify(fileId?{}:{name:'apikey.txt',parents:[folderId]})],{type:'application/json'}));
-  form.append('file',blob);
-  await fetch(fileId
-    ?`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
-    :'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-    {method:fileId?'PATCH':'POST',headers:{Authorization:`Bearer ${token}`},body:form});
-  setStatus('API-nøkkel lagret!');
-  setTimeout(()=>{statusMsg='';render();},2000);
 }
 
 function saveFormState() {
@@ -434,7 +366,6 @@ async function confirmDelete() {
   view='home'; statusMsg=''; render();
 }
 
-/* ---- SCAN ---- */
 function toBase64(file) {
   return new Promise((res,rej)=>{
     const r=new FileReader();
@@ -477,12 +408,9 @@ async function scanRecipe(file) {
     if(parsed.steps){editData.versions[0].steps=parsed.steps; document.getElementById('e-steps').value=parsed.steps;}
     if(parsed.notes){editData.versions[0].notes=parsed.notes; document.getElementById('e-notes').value=parsed.notes;}
     setStatus('Oppskrift lest! Sjekk og juster feltene.');
-  } catch(e) {
-    setStatus('Kunne ikke lese oppskriften. Prøv igjen.');
-  }
+  } catch(e) { setStatus('Kunne ikke lese oppskriften. Prøv igjen.'); }
 }
 
-/* ---- DRIVE ---- */
 async function driveReq(url,opts={}) {
   const res=await fetch(url,{...opts,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',...(opts.headers||{})}});
   return res.json();
@@ -572,7 +500,6 @@ async function uploadImage(file) {
   return `https://drive.google.com/thumbnail?id=${data.id}&sz=w600`;
 }
 
-/* ---- INIT ---- */
 const hash=new URLSearchParams(window.location.hash.slice(1));
 const t=hash.get('access_token');
 if(t){
