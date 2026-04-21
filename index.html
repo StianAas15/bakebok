@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bakebok</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f0; color: #1a1a1a; min-height: 100vh; }
+  .app { max-width: 600px; margin: 0 auto; padding: 1rem; }
+  h1 { font-size: 1.5rem; font-weight: 600; }
+  h2 { font-size: 1.2rem; font-weight: 600; margin-bottom: 1rem; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0 1.5rem; }
+  .card { background: #fff; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 12px; border: 0.5px solid #e0e0d8; }
+  .card-clickable { cursor: pointer; transition: box-shadow 0.15s; }
+  .card-clickable:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .btn { border: 0.5px solid #ccc; border-radius: 8px; padding: 8px 16px; background: transparent; color: #1a1a1a; cursor: pointer; font-size: 14px; }
+  .btn:hover { background: #f0f0e8; }
+  .btn-primary { border: none; border-radius: 8px; padding: 10px 20px; background: #1D9E75; color: #fff; cursor: pointer; font-size: 14px; font-weight: 500; }
+  .btn-primary:hover { background: #178a63; }
+  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+  input, textarea { width: 100%; border-radius: 8px; border: 0.5px solid #ccc; padding: 8px 12px; font-size: 14px; font-family: inherit; background: #fff; color: #1a1a1a; }
+  input:focus, textarea:focus { outline: none; border-color: #1D9E75; }
+  label { font-size: 12px; color: #666; display: block; margin-bottom: 4px; margin-top: 12px; }
+  label:first-child { margin-top: 0; }
+  .status { font-size: 13px; color: #666; margin: 8px 0; }
+  .muted { font-size: 12px; color: #888; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .gap { display: flex; gap: 8px; }
+  .version-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .version-tab { font-size: 12px; }
+  .version-tab.active { background: #f0f0e8; }
+  pre { white-space: pre-wrap; font-family: inherit; font-size: 14px; line-height: 1.7; }
+  img.recipe-img { width: 100%; border-radius: 8px; margin-bottom: 8px; }
+  .info-box { background: #f0f0e8; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 12px; font-size: 13px; color: #555; }
+  code { font-size: 12px; background: #fff; padding: 4px 8px; border-radius: 4px; display: block; word-break: break-all; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+
+<script>
+const CLIENT_ID = '640046806972-7c9i1u5vemrok1timpeejhef1jnpdjiv.apps.googleusercontent.com';
+const FOLDER_NAME = 'Bakebok';
+const REDIRECT_URI = window.location.origin + window.location.pathname;
+const SCOPE = 'https://www.googleapis.com/auth/drive.file';
+
+let token = null;
+let folderId = null;
+let recipes = [];
+let view = 'home';
+let selected = null;
+let selectedVersion = 0;
+let editData = null;
+let loading = false;
+let statusMsg = '';
+
+function fmt(iso) {
+  return new Date(iso).toLocaleDateString('nb-NO', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function render() {
+  const app = document.getElementById('app');
+  if (view === 'settings') { app.innerHTML = settingsView(); }
+  else if (view === 'edit') { app.innerHTML = editView(); bindEdit(); }
+  else if (view === 'recipe') { app.innerHTML = recipeView(); }
+  else { app.innerHTML = homeView(); }
+}
+
+function homeView() {
+  let cards = recipes.map(r => `
+    <div class="card card-clickable" onclick="openRecipe('${r.id}')">
+      <div class="row"><p style="font-weight:500">${r.name}</p><span class="muted">${r.versions.length} versjon${r.versions.length > 1 ? 'er' : ''}</span></div>
+      ${r.category ? `<p class="muted">${r.category}</p>` : ''}
+      <p class="muted">Sist oppdatert ${fmt(r.versions[0].date)}</p>
+    </div>`).join('');
+  return `
+    <div class="topbar">
+      <h1>🍞 Bakebok</h1>
+      <div class="gap">
+        <button class="btn" onclick="setView('settings')">Innstillinger</button>
+        ${token ? `<button class="btn-primary" onclick="startNew()">+ Ny</button>` : ''}
+      </div>
+    </div>
+    ${!token ? `<div class="card"><p style="margin-bottom:12px">Logg inn med Google for å synkronisere oppskriftene dine.</p><button class="btn-primary" onclick="signIn()">Logg inn med Google</button></div>` : ''}
+    ${statusMsg ? `<p class="status">${statusMsg}</p>` : ''}
+    ${loading ? `<p class="status">Laster...</p>` : ''}
+    ${token && !loading && recipes.length === 0 ? `<div class="info-box">Ingen oppskrifter ennå. Trykk + Ny for å legge til den første!</div>` : ''}
+    ${cards}`;
+}
+
+function settingsView() {
+  return `
+    <div class="topbar"><button class="btn" onclick="setView('home')">← Tilbake</button></div>
+    <h2>Innstillinger</h2>
+    <div class="card">
+      <p style="font-size:13px;margin-bottom:8px">Innlogget som: ${token ? '✅ Google Drive tilkoblet' : '❌ Ikke innlogget'}</p>
+      ${token ? `<button class="btn" onclick="signOut()">Logg ut</button>` : `<button class="btn-primary" onclick="signIn()">Logg inn med Google</button>`}
+    </div>
+    <div class="info-box">
+      Redirect URI (for Google Cloud Console):<code>${REDIRECT_URI}</code>
+    </div>`;
+}
+
+function recipeView() {
+  const r = recipes.find(x => x.id === selected);
+  if (!r) { view = 'home'; return homeView(); }
+  const v = r.versions[selectedVersion];
+  const tabs = r.versions.length > 1 ? `<div class="version-tabs">${r.versions.map((ver, i) => `<button class="btn version-tab ${i===selectedVersion?'active':''}" onclick="selVer(${i})">v${r.versions.length - i} · ${fmt(ver.date)}</button>`).join('')}</div>` : '';
+  const imgs = (v.images||[]).map(img => `<img class="recipe-img" src="${img}">`).join('');
+  return `
+    <div class="topbar"><button class="btn" onclick="setView('home')">← Tilbake</button>
+    <div class="gap"><button class="btn" onclick="addVersion()">+ Versjon</button><button class="btn" onclick="startEdit()">Rediger</button></div></div>
+    <h2>${r.name}</h2>
+    ${tabs}${imgs}
+    ${v.notes ? `<div class="info-box">${v.notes}</div>` : ''}
+    <div class="card"><p style="font-weight:500;margin-bottom:8px">Ingredienser</p><pre>${v.ingredients}</pre></div>
+    <div class="card"><p style="font-weight:500;margin-bottom:8px">Fremgangsmåte</p><pre>${v.steps}</pre></div>`;
+}
+
+function editView() {
+  const v = editData.versions[0];
+  const imgs = (v.images||[]).map(img => `<img class="recipe-img" src="${img}">`).join('');
+  return `
+    <div class="topbar"><button class="btn" onclick="setView('home')">← Avbryt</button></div>
+    <h2>${editData.name || 'Ny oppskrift'}</h2>
+    <div class="card">
+      <label>Navn</label><input id="e-name" value="${editData.name}" placeholder="F.eks. Surdeigsbaguetter">
+      <label>Kategori</label><input id="e-cat" value="${editData.category}" placeholder="F.eks. Brød, Boller, Kaker...">
+    </div>
+    <div class="card">
+      <p class="muted" style="margin-bottom:8px">Versjon – ${fmt(v.date)}</p>
+      <label>Ingredienser</label><textarea id="e-ing" rows="5" placeholder="500g hvetemel&#10;350g vann&#10;10g salt...">${v.ingredients}</textarea>
+      <label>Fremgangsmåte</label><textarea id="e-steps" rows="6" placeholder="1. Bland mel og vann...">${v.steps}</textarea>
+      <label>Notater / justeringer</label><textarea id="e-notes" rows="3" placeholder="Hva endret du denne gangen?">${v.notes}</textarea>
+    </div>
+    <div class="card">
+      <p style="font-weight:500;margin-bottom:8px">Bilder av resultatet</p>
+      ${imgs}
+      <input type="file" id="img-input" accept="image/*" style="display:none">
+      <button class="btn" onclick="document.getElementById('img-input').click()">+ Last opp bilde</button>
+    </div>
+    ${statusMsg ? `<p class="status">${statusMsg}</p>` : ''}
+    <button class="btn-primary" style="width:100%;margin-top:4px" onclick="handleSave()" ${loading?'disabled':''}>
+      ${loading ? 'Lagrer...' : 'Lagre oppskrift'}
+    </button>`;
+}
+
+function bindEdit() {
+  document.getElementById('img-input').addEventListener('change', async e => {
+    const file = e.target.files[0]; if (!file) return;
+    setStatus('Laster opp bilde...');
+    const url = await uploadImage(file);
+    editData.versions[0].images = [...(editData.versions[0].images||[]), url];
+    setStatus(''); render();
+  });
+}
+
+function setView(v) { view = v; render(); }
+function openRecipe(id) { selected = id; selectedVersion = 0; view = 'recipe'; render(); }
+function selVer(i) { selectedVersion = i; render(); }
+function setStatus(s) { statusMsg = s; render(); }
+
+function signIn() {
+  const params = new URLSearchParams({ client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, response_type: 'token', scope: SCOPE, prompt: 'consent' });
+  window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
+}
+
+function signOut() { token = null; recipes = []; folderId = null; render(); }
+
+function startNew() {
+  editData = { id: `recipe_${Date.now()}`, name: '', category: '', versions: [{ date: new Date().toISOString(), notes: '', ingredients: '', steps: '', images: [] }] };
+  view = 'edit'; render();
+}
+
+function startEdit() {
+  editData = JSON.parse(JSON.stringify(recipes.find(r => r.id === selected)));
+  view = 'edit'; render();
+}
+
+function addVersion() {
+  const r = recipes.find(x => x.id === selected);
+  editData = JSON.parse(JSON.stringify(r));
+  editData.versions.unshift({ date: new Date().toISOString(), notes: '', ingredients: editData.versions[0].ingredients, steps: editData.versions[0].steps, images: [] });
+  view = 'edit'; render();
+}
+
+async function handleSave() {
+  editData.name = document.getElementById('e-name').value;
+  editData.category = document.getElementById('e-cat').value;
+  editData.versions[0].ingredients = document.getElementById('e-ing').value;
+  editData.versions[0].steps = document.getElementById('e-steps').value;
+  editData.versions[0].notes = document.getElementById('e-notes').value;
+  if (!editData.name.trim()) { setStatus('Gi oppskriften et navn.'); return; }
+  await saveRecipe(editData);
+  view = 'home'; editData = null; render();
+}
+
+async function driveReq(url, opts = {}) {
+  const res = await fetch(url, { ...opts, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(opts.headers||{}) } });
+  return res.json();
+}
+
+async function initDrive() {
+  loading = true; setStatus('Kobler til Google Drive...');
+  const list = await driveReq(`https://www.googleapis.com/drive/v3/files?q=name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name)`);
+  let fid = list.files?.[0]?.id;
+  if (!fid) {
+    const f = await driveReq('https://www.googleapis.com/drive/v3/files', { method: 'POST', body: JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' }) });
+    fid = f.id;
+  }
+  folderId = fid;
+  await loadRecipes();
+  loading = false; setStatus(''); render();
+}
+
+async function loadRecipes() {
+  const list = await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name contains '.json' and trashed=false&fields=files(id,name)`);
+  const all = await Promise.all((list.files||[]).map(async f => {
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`, { headers: { Authorization: `Bearer ${token}` } });
+    return r.json();
+  }));
+  recipes = all.sort((a, b) => new Date(b.versions[0].date) - new Date(a.versions[0].date));
+}
+
+async function saveRecipe(recipe) {
+  loading = true; setStatus('Lagrer...');
+  const existing = await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='${recipe.id}.json' and trashed=false&fields=files(id)`);
+  const fileId = existing.files?.[0]?.id;
+  const blob = new Blob([JSON.stringify(recipe)], { type: 'application/json' });
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(fileId ? {} : { name: `${recipe.id}.json`, parents: [folderId] })], { type: 'application/json' }));
+  form.append('file', blob);
+  await fetch(fileId ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart` : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+    { method: fileId ? 'PATCH' : 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+  await loadRecipes();
+  loading = false; setStatus('Lagret!'); setTimeout(() => { setStatus(''); render(); }, 2000);
+}
+
+async function uploadImage(file) {
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify({ name: file.name, parents: [folderId] })], { type: 'application/json' }));
+  form.append('file', file);
+  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+  const data = await res.json();
+  await driveReq(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions`, { method: 'POST', body: JSON.stringify({ role: 'reader', type: 'anyone' }) });
+  return `https://drive.google.com/thumbnail?id=${data.id}&sz=w600`;
+}
+
+// Håndter redirect etter innlogging
+const hash = new URLSearchParams(window.location.hash.slice(1));
+const t = hash.get('access_token');
+if (t) { token = t; window.history.replaceState({}, '', window.location.pathname); initDrive(); }
+else { render(); }
+</script>
+</body>
+</html>
