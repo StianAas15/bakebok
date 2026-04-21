@@ -25,13 +25,13 @@
   .btn-primary:hover { background: #178a63; }
   .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
   .btn-danger { border: 0.5px solid #c0392b; border-radius: 8px; padding: 8px 16px; background: transparent; color: #c0392b; cursor: pointer; font-size: 14px; }
-  .btn-sm { padding: 5px 10px; font-size: 12px; }
   input, textarea, select { width: 100%; border-radius: 8px; border: 0.5px solid #ccc; padding: 8px 12px; font-size: 14px; font-family: inherit; background: #fff; color: #1a1a1a; }
   input:focus, textarea:focus, select:focus { outline: none; border-color: #1D9E75; }
   label { font-size: 12px; color: #666; display: block; margin-bottom: 4px; margin-top: 12px; }
   label:first-child { margin-top: 0; }
   .status { font-size: 13px; color: #666; margin: 8px 0; }
   .muted { font-size: 12px; color: #888; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .gap { display: flex; gap: 8px; flex-wrap: wrap; }
   .version-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
   .version-tab { font-size: 12px; }
@@ -50,13 +50,6 @@
   .cat-icon { font-size: 22px; display: block; margin-bottom: 4px; }
   .cat-name { font-size: 13px; font-weight: 500; line-height: 1.3; display: block; }
   .cat-count { font-size: 11px; opacity: 0.6; margin-top: 2px; display: block; }
-  .cat-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 0.5px solid #f0f0e8; }
-  .cat-row:last-child { border-bottom: none; }
-  .cat-row-icon { font-size: 20px; width: 28px; text-align: center; }
-  .cat-row-name { flex: 1; font-size: 14px; }
-  .emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin-top: 8px; max-height: 160px; overflow-y: auto; }
-  .emoji-opt { font-size: 20px; padding: 4px; border-radius: 6px; cursor: pointer; text-align: center; border: 0.5px solid transparent; }
-  .emoji-opt:hover, .emoji-opt.selected { border-color: #1D9E75; background: #e8f5f0; }
 </style>
 </head>
 <body>
@@ -67,7 +60,7 @@ const FOLDER_NAME = 'Bakebok';
 const REDIRECT_URI = window.location.origin + window.location.pathname;
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
-const DEFAULT_CATEGORIES = [
+const CATEGORIES = [
   { id: 'gjærbrød',  name: 'Brød på gjær',    icon: '🍞' },
   { id: 'surdeig',   name: 'Brød på surdeig',  icon: '🫓' },
   { id: 'søtbakst',  name: 'Søtbakst på gjær', icon: '🥐' },
@@ -75,8 +68,6 @@ const DEFAULT_CATEGORIES = [
   { id: 'kaker',     name: 'Kaker',             icon: '🎂' },
   { id: 'andre',     name: 'Andre bakverk',     icon: '🧁' },
 ];
-
-const EMOJI_OPTS = ['🍞','🫓','🥐','🥖','🧇','🥞','🧆','🥨','🍩','🍪','🎂','🧁','🍰','🍫','🍬','🍭','🍯','🍓','🍋','🍊','🫐','🍇','🥝','🥜','🌾','🧂','🫙','🍶','☕','🫖'];
 
 const CAT_ALIAS = {
   'brød på gjær':'gjærbrød','gjærbrød':'gjærbrød',
@@ -86,24 +77,15 @@ const CAT_ALIAS = {
   'kaker':'kaker','andre bakverk':'andre','andre':'andre',
 };
 
-function normCat(c) {
-  if (!c) return '';
-  const lower = c.toLowerCase();
-  if (CAT_ALIAS[lower]) return CAT_ALIAS[lower];
-  const found = categories.find(cat => cat.id === c || cat.name.toLowerCase() === lower);
-  return found ? found.id : c;
-}
+function normCat(c) { return c ? (CAT_ALIAS[c.toLowerCase()] || c) : ''; }
 function fmt(iso) { return new Date(iso).toLocaleDateString('nb-NO',{day:'2-digit',month:'short',year:'numeric'}); }
-function genId() { return 'cat_' + Date.now(); }
 
 let token        = sessionStorage.getItem('bakebok_token') || null;
 let anthropicKey = sessionStorage.getItem('bakebok_akey')  || null;
 let coverImageUrl= sessionStorage.getItem('bakebok_cover') || null;
 let folderId     = null;
 let coverFileId  = null;
-let categoriesFileId = null;
 let recipes      = [];
-let categories   = [...DEFAULT_CATEGORIES];
 let view         = 'home';
 let selected     = null;
 let selectedVersion = 0;
@@ -111,7 +93,6 @@ let editData     = null;
 let loading      = false;
 let statusMsg    = '';
 let activeCategory = null;
-let newCatIcon   = '🧁';
 
 function render() {
   const app = document.getElementById('app');
@@ -134,7 +115,7 @@ function homeView() {
     <button class="btn-primary" onclick="signIn()">Logg inn med Google</button></div>
     ${statusMsg ? `<p class="status">${statusMsg}</p>` : ''}`;
 
-  const catGrid = categories.map(c => {
+  const catGrid = CATEGORIES.map(c => {
     const count = recipes.filter(r => normCat(r.category) === c.id).length;
     return `<button class="cat-btn ${activeCategory===c.id?'active':''}" onclick="selectCat('${c.id}')">
       <span class="cat-icon">${c.icon}</span>
@@ -144,7 +125,7 @@ function homeView() {
   }).join('');
 
   const filtered = activeCategory ? recipes.filter(r => normCat(r.category) === activeCategory) : [];
-  const catLabel = activeCategory ? categories.find(c=>c.id===activeCategory)?.name : '';
+  const catLabel = activeCategory ? CATEGORIES.find(c=>c.id===activeCategory)?.name : '';
 
   const recipeList = activeCategory ? `
     <button class="btn" style="margin-bottom:12px" onclick="selectCat(null)">← Alle kategorier</button>
@@ -173,16 +154,6 @@ function homeView() {
 }
 
 function settingsView() {
-  const catList = categories.map(c => `
-    <div class="cat-row">
-      <span class="cat-row-icon">${c.icon}</span>
-      <span class="cat-row-name">${c.name}</span>
-      <button class="btn btn-sm btn-danger" onclick="deleteCategory('${c.id}')">Slett</button>
-    </div>`).join('');
-
-  const emojiGrid = EMOJI_OPTS.map(e =>
-    `<div class="emoji-opt ${e===newCatIcon?'selected':''}" onclick="pickEmoji('${e}')">${e}</div>`).join('');
-
   return `
     <div class="topbar"><button class="btn" onclick="setView('home')">← Tilbake</button></div>
     <h2>Innstillinger</h2>
@@ -197,22 +168,10 @@ function settingsView() {
       <button class="btn" onclick="document.getElementById('cover-input').click()">Last opp forsidebilde</button>
     </div>`:''}
     <div class="card">
-      <p style="font-weight:500;margin-bottom:8px">Kategorier</p>
-      ${catList}
-      <div style="border-top:0.5px solid #e0e0d8;margin-top:12px;padding-top:12px">
-        <p style="font-size:13px;font-weight:500;margin-bottom:8px">Legg til ny kategori</p>
-        <div class="gap" style="margin-bottom:8px">
-          <span style="font-size:24px;min-width:36px;text-align:center" id="chosen-icon">${newCatIcon}</span>
-          <input id="new-cat-name" placeholder="Navn på kategori" style="flex:1">
-        </div>
-        <div class="emoji-grid">${emojiGrid}</div>
-        <button class="btn-primary" style="width:100%;margin-top:10px" onclick="addCategory()">+ Legg til kategori</button>
-      </div>
-    </div>
-    <div class="card">
       <p style="font-weight:500;margin-bottom:6px">Claude API-nøkkel</p>
-      <p class="muted" style="margin-bottom:8px">Brukes til å lese oppskrifter fra bilder.</p>
-      <input type="password" id="akey-input" value="${anthropicKey||''}" placeholder="sk-ant-...">
+      <p class="muted" style="margin-bottom:8px">Brukes til å lese oppskrifter fra bilder. Lagres i Drive.</p>
+      ${anthropicKey?`<p style="font-size:13px;color:#1D9E75;margin-bottom:8px">✅ API-nøkkel er lagret</p>`:`<p style="font-size:13px;color:#c0392b;margin-bottom:8px">❌ Ingen API-nøkkel funnet</p>`}
+      <input type="password" id="akey-input" placeholder="sk-ant-...">
       <button class="btn-primary" style="margin-top:10px;width:100%" onclick="saveApiKey()">Lagre nøkkel</button>
     </div>
     ${statusMsg?`<p class="status">${statusMsg}</p>`:''}
@@ -223,7 +182,7 @@ function recipeView() {
   const r = recipes.find(x=>x.id===selected);
   if (!r) { view='home'; return homeView(); }
   const v = r.versions[selectedVersion];
-  const catName = categories.find(c=>c.id===normCat(r.category))?.name || r.category;
+  const catName = CATEGORIES.find(c=>c.id===normCat(r.category))?.name || r.category;
   const tabs = r.versions.length>1?`<div class="version-tabs">${r.versions.map((ver,i)=>
     `<button class="btn version-tab ${i===selectedVersion?'active':''}" onclick="selVer(${i})">v${r.versions.length-i} · ${fmt(ver.date)}</button>`).join('')}</div>`:'';
   const imgs = (v.images||[]).map(img=>`<img class="recipe-img" src="${img}" alt="">`).join('');
@@ -246,10 +205,11 @@ function editView() {
   const v = editData.versions[0];
   const imgs = (v.images||[]).map(img=>`<img class="recipe-img" src="${img}" alt="">`).join('');
   const currentCat = normCat(editData.category);
-  const catOptions = categories.map(c=>`<option value="${c.id}" ${currentCat===c.id?'selected':''}>${c.icon} ${c.name}</option>`).join('');
+  const catOptions = CATEGORIES.map(c=>`<option value="${c.id}" ${currentCat===c.id?'selected':''}>${c.icon} ${c.name}</option>`).join('');
   return `
     <div class="topbar"><button class="btn" onclick="setView('home')">← Avbryt</button></div>
     <h2>${editData.name||'Ny oppskrift'}</h2>
+
     <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Scan oppskrift fra bilde</p>
       <p class="muted" style="margin-bottom:10px">Ta bilde av en oppskrift – Claude leser den og fyller inn feltene automatisk.</p>
@@ -260,6 +220,7 @@ function editView() {
         <button class="btn" style="flex:1" onclick="document.getElementById('scan-input').click()">🖼 Last opp</button>
       </div>
     </div>
+
     <div class="card">
       <label>Navn</label><input id="e-name" value="${editData.name}" placeholder="F.eks. Surdeigsbaguetter">
       <label>Kategori</label>
@@ -307,34 +268,6 @@ function bindSettings() {
   });
 }
 
-/* ---- CATEGORY ACTIONS ---- */
-function pickEmoji(e) { newCatIcon=e; render(); }
-
-async function addCategory() {
-  const name = document.getElementById('new-cat-name').value.trim();
-  if (!name) { setStatus('Skriv inn et kategorinavn.'); return; }
-  const id = genId();
-  categories.push({ id, name, icon: newCatIcon });
-  await saveCategories();
-  newCatIcon = '🧁';
-  setStatus('Kategori lagt til!');
-  setTimeout(()=>{ statusMsg=''; render(); }, 1500);
-  render();
-}
-
-async function deleteCategory(id) {
-  const cat = categories.find(c=>c.id===id);
-  if (!cat) return;
-  const count = recipes.filter(r=>normCat(r.category)===id).length;
-  const msg = count > 0
-    ? `Vil du slette kategorien "${cat.name}"? Den har ${count} oppskrift${count!==1?'er':''} – disse mister kategoritilhørighet.`
-    : `Vil du slette kategorien "${cat.name}"?`;
-  if (!confirm(msg)) return;
-  categories = categories.filter(c=>c.id!==id);
-  await saveCategories();
-  render();
-}
-
 /* ---- ACTIONS ---- */
 function setView(v) { view=v; statusMsg=''; render(); }
 function goHome() { activeCategory=null; view='home'; render(); }
@@ -352,6 +285,83 @@ function signOut() {
   token=null; recipes=[]; folderId=null;
   sessionStorage.removeItem('bakebok_token');
   render();
+}
+
+async function getEncKey(password) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name:'PBKDF2', salt:enc.encode('bakebok-salt'), iterations:100000, hash:'SHA-256' },
+    keyMaterial, { name:'AES-GCM', length:256 }, false, ['encrypt','decrypt']
+  );
+}
+
+async function encryptText(text, password) {
+  const key = await getEncKey(password);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const enc = new TextEncoder();
+  const encrypted = await crypto.subtle.encrypt({name:'AES-GCM',iv}, key, enc.encode(text));
+  const buf = new Uint8Array(iv.byteLength + encrypted.byteLength);
+  buf.set(iv, 0); buf.set(new Uint8Array(encrypted), iv.byteLength);
+  return btoa(String.fromCharCode(...buf));
+}
+
+async function decryptText(b64, password) {
+  const buf = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const iv = buf.slice(0, 12);
+  const data = buf.slice(12);
+  const key = await getEncKey(password);
+  const dec = await crypto.subtle.decrypt({name:'AES-GCM',iv}, key, data);
+  return new TextDecoder().decode(dec);
+}
+
+async function saveApiKey() {
+  const k = document.getElementById('akey-input').value.trim();
+  const p = document.getElementById('enc-password').value.trim();
+  if (!k) { setStatus('Lim inn API-nøkkelen.'); return; }
+  if (!p) { setStatus('Velg et krypteringspassord.'); return; }
+  setStatus('Lagrer nøkkel...');
+  try {
+    const encrypted = await encryptText(k, p);
+    anthropicKey = k;
+    sessionStorage.setItem('bakebok_akey', k);
+    const list = await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='apikey.txt' and trashed=false&fields=files(id)`);
+    const fileId = list.files?.[0]?.id;
+    const blob = new Blob([encrypted], {type:'text/plain'});
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(fileId?{}:{name:'apikey.txt',parents:[folderId]})], {type:'application/json'}));
+    form.append('file', blob);
+    await fetch(fileId
+      ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
+      : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+      {method:fileId?'PATCH':'POST', headers:{Authorization:`Bearer ${token}`}, body:form});
+    setStatus('API-nøkkel lagret og kryptert!');
+    setTimeout(()=>{statusMsg='';render();}, 2000);
+  } catch(e) { setStatus('Feil ved lagring.'); }
+}
+
+async function unlockApiKey() {
+  const p = document.getElementById('unlock-password').value.trim();
+  if (!p) { setStatus('Skriv inn passordet ditt.'); return; }
+  setStatus('Låser opp...');
+  try {
+    const list = await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='apikey.txt' and trashed=false&fields=files(id)`);
+    if (!list.files?.[0]?.id) { setStatus('Ingen lagret nøkkel funnet.'); return; }
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${list.files[0].id}?alt=media`, {headers:{Authorization:`Bearer ${token}`}});
+    const encrypted = await r.text();
+    const key = await decryptText(encrypted, p);
+    anthropicKey = key;
+    sessionStorage.setItem('bakebok_akey', key);
+    setStatus('Nøkkel låst opp!');
+    setTimeout(()=>{statusMsg='';render();}, 2000);
+  } catch(e) { setStatus('Feil passord eller ingen nøkkel funnet.'); }
+}
+  const list=await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='apikey.txt' and trashed=false&fields=files(id)`);
+  if(list.files?.[0]?.id){
+    const r=await fetch(`https://www.googleapis.com/drive/v3/files/${list.files[0].id}?alt=media`,{headers:{Authorization:`Bearer ${token}`}});
+    const key=await r.text();
+    if(key) { anthropicKey=key.trim(); sessionStorage.setItem('bakebok_akey',anthropicKey); }
+  }
 }
 
 async function saveApiKey() {
@@ -387,4 +397,194 @@ function saveFormState() {
 }
 
 function startNew() {
-  editData={id:`recipe_${Date.now()}`,name:'',category:'',versions:[{date:new
+  editData={id:`recipe_${Date.now()}`,name:'',category:'',versions:[{date:new Date().toISOString(),notes:'',ingredients:'',steps:'',images:[]}]};
+  view='edit'; render();
+}
+function startEdit() {
+  editData=JSON.parse(JSON.stringify(recipes.find(r=>r.id===selected)));
+  view='edit'; render();
+}
+function addVersion() {
+  const r=recipes.find(x=>x.id===selected);
+  editData=JSON.parse(JSON.stringify(r));
+  editData.versions.unshift({date:new Date().toISOString(),notes:'',ingredients:editData.versions[0].ingredients,steps:editData.versions[0].steps,images:[]});
+  view='edit'; render();
+}
+
+async function handleSave() {
+  editData.name=document.getElementById('e-name').value;
+  editData.category=document.getElementById('e-cat').value;
+  editData.versions[0].ingredients=document.getElementById('e-ing').value;
+  editData.versions[0].steps=document.getElementById('e-steps').value;
+  editData.versions[0].notes=document.getElementById('e-notes').value;
+  if(!editData.name.trim()){setStatus('Gi oppskriften et navn.');return;}
+  await saveRecipe(editData);
+  view='home'; editData=null; render();
+}
+
+async function confirmDelete() {
+  const r=recipes.find(x=>x.id===selected);
+  if(!r) return;
+  if(!confirm(`Vil du slette "${r.name}"? Dette kan ikke angres.`)) return;
+  setStatus('Sletter...');
+  const existing=await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='${r.id}.json' and trashed=false&fields=files(id)`);
+  const fileId=existing.files?.[0]?.id;
+  if(fileId) await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`,{method:'DELETE',headers:{Authorization:`Bearer ${token}`}});
+  await loadRecipes();
+  view='home'; statusMsg=''; render();
+}
+
+/* ---- SCAN ---- */
+function toBase64(file) {
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result.split(',')[1]);
+    r.onerror=rej;
+    r.readAsDataURL(file);
+  });
+}
+
+async function scanRecipe(file) {
+  if(!file) return;
+  if(!anthropicKey){setStatus('Legg inn Claude API-nøkkel i innstillinger først.');return;}
+  saveFormState();
+  setStatus('Leser oppskrift fra bilde...');
+  const b64=await toBase64(file);
+  const mediaType=file.type||'image/jpeg';
+  try {
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{
+        'x-api-key':anthropicKey,
+        'anthropic-version':'2023-06-01',
+        'content-type':'application/json',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
+      body:JSON.stringify({
+        model:'claude-haiku-4-5-20251001',
+        max_tokens:1024,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:mediaType,data:b64}},
+          {type:'text',text:'Dette er et bilde av en oppskrift. Trekk ut informasjonen og returner KUN gyldig JSON (ingen forklaring, ingen markdown) med disse feltene: {"name":"oppskriftsnavn","ingredients":"ingredienser som tekst med linjeskift","steps":"fremgangsmåte som nummerert tekst med linjeskift","notes":"eventuelle notater eller tips"}. Hvis noe mangler, bruk tom streng.'}
+        ]}]
+      })
+    });
+    const data=await res.json();
+    const text=data.content?.[0]?.text||'';
+    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
+    if(parsed.name){editData.name=parsed.name; document.getElementById('e-name').value=parsed.name;}
+    if(parsed.ingredients){editData.versions[0].ingredients=parsed.ingredients; document.getElementById('e-ing').value=parsed.ingredients;}
+    if(parsed.steps){editData.versions[0].steps=parsed.steps; document.getElementById('e-steps').value=parsed.steps;}
+    if(parsed.notes){editData.versions[0].notes=parsed.notes; document.getElementById('e-notes').value=parsed.notes;}
+    setStatus('Oppskrift lest! Sjekk og juster feltene.');
+  } catch(e) {
+    setStatus('Kunne ikke lese oppskriften. Prøv igjen.');
+  }
+}
+
+/* ---- DRIVE ---- */
+async function driveReq(url,opts={}) {
+  const res=await fetch(url,{...opts,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',...(opts.headers||{})}});
+  return res.json();
+}
+
+async function initDrive() {
+  loading=true; setStatus('Kobler til Google Drive...');
+  const list=await driveReq(`https://www.googleapis.com/drive/v3/files?q=name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name)`);
+  let fid=list.files?.[0]?.id;
+  if(!fid){
+    const f=await driveReq('https://www.googleapis.com/drive/v3/files',{method:'POST',body:JSON.stringify({name:FOLDER_NAME,mimeType:'application/vnd.google-apps.folder'})});
+    fid=f.id;
+  }
+  folderId=fid;
+  await loadCoverImage();
+  await loadApiKey();
+  await loadRecipes();
+  loading=false; statusMsg=''; render();
+}
+
+async function loadRecipes() {
+  const list=await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name contains '.json' and trashed=false&fields=files(id,name)`);
+  const all=await Promise.all((list.files||[]).map(async f=>{
+    const r=await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,{headers:{Authorization:`Bearer ${token}`}});
+    return r.json();
+  }));
+  recipes=all.sort((a,b)=>new Date(b.versions[0].date)-new Date(a.versions[0].date));
+}
+
+async function loadCoverImage() {
+  const list=await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='cover.jpg' and trashed=false&fields=files(id)`);
+  if(list.files?.[0]?.id){
+    coverFileId=list.files[0].id;
+    coverImageUrl=`https://drive.google.com/thumbnail?id=${coverFileId}&sz=w800`;
+    sessionStorage.setItem('bakebok_cover',coverImageUrl);
+  }
+}
+
+async function uploadCoverImage(file) {
+  const form=new FormData();
+  form.append('metadata',new Blob([JSON.stringify(coverFileId?{}:{name:'cover.jpg',parents:[folderId]})],{type:'application/json'}));
+  form.append('file',file);
+  const res=await fetch(coverFileId
+    ?`https://www.googleapis.com/upload/drive/v3/files/${coverFileId}?uploadType=multipart&fields=id`
+    :'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+    {method:coverFileId?'PATCH':'POST',headers:{Authorization:`Bearer ${token}`},body:form});
+  const data=await res.json();
+  if(!coverFileId){
+    coverFileId=data.id;
+    await driveReq(`https://www.googleapis.com/drive/v3/files/${coverFileId}/permissions`,{method:'POST',body:JSON.stringify({role:'reader',type:'anyone'})});
+  }
+  coverImageUrl=`https://drive.google.com/thumbnail?id=${coverFileId}&sz=w800&t=${Date.now()}`;
+}
+
+async function handleImageFile(file) {
+  if(!file) return;
+  saveFormState();
+  setStatus('Laster opp bilde...');
+  const url=await uploadImage(file);
+  editData.versions[0].images=[...(editData.versions[0].images||[]),url];
+  setStatus(''); render();
+}
+
+async function saveRecipe(recipe) {
+  loading=true; setStatus('Lagrer...');
+  const existing=await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='${recipe.id}.json' and trashed=false&fields=files(id)`);
+  const fileId=existing.files?.[0]?.id;
+  const blob=new Blob([JSON.stringify(recipe)],{type:'application/json'});
+  const form=new FormData();
+  form.append('metadata',new Blob([JSON.stringify(fileId?{}:{name:`${recipe.id}.json`,parents:[folderId]})],{type:'application/json'}));
+  form.append('file',blob);
+  await fetch(fileId
+    ?`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
+    :'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+    {method:fileId?'PATCH':'POST',headers:{Authorization:`Bearer ${token}`},body:form});
+  await loadRecipes();
+  loading=false; setStatus('Lagret!'); setTimeout(()=>{statusMsg='';render();},2000);
+}
+
+async function uploadImage(file) {
+  const form=new FormData();
+  form.append('metadata',new Blob([JSON.stringify({name:file.name,parents:[folderId]})],{type:'application/json'}));
+  form.append('file',file);
+  const res=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',{method:'POST',headers:{Authorization:`Bearer ${token}`},body:form});
+  const data=await res.json();
+  await driveReq(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions`,{method:'POST',body:JSON.stringify({role:'reader',type:'anyone'})});
+  return `https://drive.google.com/thumbnail?id=${data.id}&sz=w600`;
+}
+
+/* ---- INIT ---- */
+const hash=new URLSearchParams(window.location.hash.slice(1));
+const t=hash.get('access_token');
+if(t){
+  token=t;
+  sessionStorage.setItem('bakebok_token',t);
+  window.history.replaceState({},'',window.location.pathname);
+  initDrive();
+} else if(token){
+  initDrive();
+} else {
+  render();
+}
+</script>
+</body>
+</html>
