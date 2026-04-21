@@ -34,25 +34,20 @@
   img.recipe-img { width: 100%; border-radius: 8px; margin-bottom: 8px; }
   .info-box { background: #f0f0e8; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 12px; font-size: 13px; color: #555; }
   code { font-size: 12px; background: #fff; padding: 4px 8px; border-radius: 4px; display: block; word-break: break-all; margin-top: 6px; }
-
-  .hero { width: 100%; height: 180px; border-radius: 16px; object-fit: cover; margin-bottom: 1.25rem; background: #e8e8e0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .hero { width: 100%; height: 180px; border-radius: 16px; overflow: hidden; margin-bottom: 1.25rem; }
   .hero img { width: 100%; height: 100%; object-fit: cover; }
   .hero-placeholder { width: 100%; height: 180px; border-radius: 16px; background: linear-gradient(135deg, #e8e4d8, #d4c9a8); margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: center; font-size: 48px; }
-
   .categories { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1.25rem; }
-  .cat-btn { border: 0.5px solid #e0e0d8; border-radius: 12px; padding: 14px 12px; background: #fff; cursor: pointer; text-align: left; transition: all 0.15s; }
+  .cat-btn { border: 0.5px solid #e0e0d8; border-radius: 12px; padding: 14px 12px; background: #fff; cursor: pointer; text-align: left; transition: all 0.15s; width: 100%; }
   .cat-btn:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-color: #1D9E75; }
   .cat-btn.active { background: #1D9E75; border-color: #1D9E75; color: #fff; }
-  .cat-btn .cat-icon { font-size: 22px; display: block; margin-bottom: 4px; }
-  .cat-btn .cat-name { font-size: 13px; font-weight: 500; line-height: 1.3; }
-  .cat-btn .cat-count { font-size: 11px; opacity: 0.6; margin-top: 2px; }
-
-  .back-to-cats { font-size: 13px; color: #1D9E75; cursor: pointer; margin-bottom: 12px; display: inline-block; }
+  .cat-icon { font-size: 22px; display: block; margin-bottom: 4px; }
+  .cat-name { font-size: 13px; font-weight: 500; line-height: 1.3; display: block; }
+  .cat-count { font-size: 11px; opacity: 0.6; margin-top: 2px; display: block; }
 </style>
 </head>
 <body>
 <div class="app" id="app"></div>
-
 <script>
 const CLIENT_ID = '640046806972-7c9i1u5vemrok1timpeejhef1jnpdjiv.apps.googleusercontent.com';
 const FOLDER_NAME = 'Bakebok';
@@ -60,15 +55,30 @@ const REDIRECT_URI = window.location.origin + window.location.pathname;
 const SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
 const CATEGORIES = [
-  { id: 'gjærbrød', name: 'Brød på gjær', icon: '🍞' },
-  { id: 'surdeig', name: 'Brød på surdeig', icon: '🫓' },
-  { id: 'søtbakst', name: 'Søtbakst på gjær', icon: '🥐' },
-  { id: 'kjeks', name: 'Kjeks og scones', icon: '🍪' },
-  { id: 'kaker', name: 'Kaker', icon: '🎂' },
-  { id: 'andre', name: 'Andre bakverk', icon: '🧁' },
+  { id: 'gjærbrød',  name: 'Brød på gjær',      icon: '🍞' },
+  { id: 'surdeig',   name: 'Brød på surdeig',    icon: '🫓' },
+  { id: 'søtbakst',  name: 'Søtbakst på gjær',   icon: '🥐' },
+  { id: 'kjeks',     name: 'Kjeks og scones',     icon: '🍪' },
+  { id: 'kaker',     name: 'Kaker',               icon: '🎂' },
+  { id: 'andre',     name: 'Andre bakverk',       icon: '🧁' },
 ];
 
-let token = null;
+// Map gamle kategorinavn til nye ID-er
+const CAT_ALIAS = {
+  'brød på gjær': 'gjærbrød', 'gjærbrød': 'gjærbrød',
+  'brød på surdeig': 'surdeig', 'surdeig': 'surdeig',
+  'søtbakst på gjær': 'søtbakst', 'søtbakst': 'søtbakst',
+  'kjeks og scones': 'kjeks', 'kjeks': 'kjeks', 'scones': 'kjeks',
+  'kaker': 'kaker',
+  'andre bakverk': 'andre', 'andre': 'andre',
+};
+
+function normCat(c) {
+  if (!c) return '';
+  return CAT_ALIAS[c.toLowerCase()] || c;
+}
+
+let token = sessionStorage.getItem('bakebok_token') || null;
 let folderId = null;
 let recipes = [];
 let view = 'home';
@@ -78,7 +88,7 @@ let editData = null;
 let loading = false;
 let statusMsg = '';
 let activeCategory = null;
-let coverImageUrl = null;
+let coverImageUrl = sessionStorage.getItem('bakebok_cover') || null;
 let coverFileId = null;
 
 function fmt(iso) {
@@ -87,7 +97,7 @@ function fmt(iso) {
 
 function render() {
   const app = document.getElementById('app');
-  if (view === 'settings') app.innerHTML = settingsView();
+  if (view === 'settings') { app.innerHTML = settingsView(); bindSettings(); }
   else if (view === 'edit') { app.innerHTML = editView(); bindEdit(); }
   else if (view === 'recipe') app.innerHTML = recipeView();
   else app.innerHTML = homeView();
@@ -100,46 +110,43 @@ function homeView() {
 
   if (!token) return `
     ${hero}
-    <div class="topbar" style="padding-top:0">
-      <h1>Bakebok</h1>
-      <button class="btn" onclick="setView('settings')">Innstillinger</button>
-    </div>
+    <div class="topbar" style="padding-top:0"><h1>Bakebok</h1>
+    <button class="btn" onclick="setView('settings')">Innstillinger</button></div>
     <div class="card"><p style="margin-bottom:12px">Logg inn med Google for å synkronisere oppskriftene dine.</p>
     <button class="btn-primary" onclick="signIn()">Logg inn med Google</button></div>
     ${statusMsg ? `<p class="status">${statusMsg}</p>` : ''}`;
 
   const catGrid = CATEGORIES.map(c => {
-    const count = recipes.filter(r => r.category === c.id).length;
+    const count = recipes.filter(r => normCat(r.category) === c.id).length;
     const isActive = activeCategory === c.id;
-    return `<button class="cat-btn ${isActive ? 'active' : ''}" onclick="selectCat('${c.id}')">
+    return `<button class="cat-btn ${isActive?'active':''}" onclick="selectCat('${c.id}')">
       <span class="cat-icon">${c.icon}</span>
       <span class="cat-name">${c.name}</span>
-      <span class="cat-count">${count} oppskrift${count !== 1 ? 'er' : ''}</span>
+      <span class="cat-count">${count} oppskrift${count!==1?'er':''}</span>
     </button>`;
   }).join('');
 
-  const filtered = activeCategory ? recipes.filter(r => r.category === activeCategory) : [];
+  const filtered = activeCategory ? recipes.filter(r => normCat(r.category) === activeCategory) : [];
   const catName = activeCategory ? CATEGORIES.find(c => c.id === activeCategory)?.name : '';
 
   const recipeList = activeCategory ? `
-    <span class="back-to-cats" onclick="selectCat(null)">← Alle kategorier</span>
-    <h2>${catName}</h2>
+    <button class="btn" style="margin-bottom:12px" onclick="selectCat(null)">← Alle kategorier</button>
+    <h2 style="margin-bottom:12px">${catName}</h2>
     ${filtered.length === 0 ? `<div class="info-box">Ingen oppskrifter i denne kategorien ennå.</div>` : ''}
     ${filtered.map(r => `
       <div class="card card-clickable" onclick="openRecipe('${r.id}')">
-        <div class="row"><p style="font-weight:500">${r.name}</p><span class="muted">${r.versions.length} versjon${r.versions.length > 1 ? 'er' : ''}</span></div>
+        <div class="row"><p style="font-weight:500">${r.name}</p>
+        <span class="muted">${r.versions.length} versjon${r.versions.length>1?'er':''}</span></div>
         <p class="muted">Sist oppdatert ${fmt(r.versions[0].date)}</p>
       </div>`).join('')}` : '';
 
   return `
     ${hero}
-    <div class="topbar" style="padding-top:0">
-      <h1>Bakebok</h1>
-      <div class="gap">
-        <button class="btn" onclick="setView('settings')">Innstillinger</button>
-        <button class="btn-primary" onclick="startNew()">+ Ny</button>
-      </div>
-    </div>
+    <div class="topbar" style="padding-top:0"><h1>Bakebok</h1>
+    <div class="gap">
+      <button class="btn" onclick="setView('settings')">Innstillinger</button>
+      <button class="btn-primary" onclick="startNew()">+ Ny</button>
+    </div></div>
     ${loading ? `<p class="status">Laster...</p>` : ''}
     ${statusMsg ? `<p class="status">${statusMsg}</p>` : ''}
     ${!activeCategory ? `<div class="categories">${catGrid}</div>` : recipeList}`;
@@ -150,12 +157,12 @@ function settingsView() {
     <div class="topbar"><button class="btn" onclick="setView('home')">← Tilbake</button></div>
     <h2>Innstillinger</h2>
     <div class="card">
-      <p style="font-size:13px;margin-bottom:8px">Innlogget som: ${token ? '✅ Google Drive tilkoblet' : '❌ Ikke innlogget'}</p>
+      <p style="font-size:13px;margin-bottom:8px">Status: ${token ? '✅ Google Drive tilkoblet' : '❌ Ikke innlogget'}</p>
       ${token ? `<button class="btn" onclick="signOut()">Logg ut</button>` : `<button class="btn-primary" onclick="signIn()">Logg inn med Google</button>`}
     </div>
     ${token ? `<div class="card">
       <p style="font-weight:500;margin-bottom:8px">Forsidebilde</p>
-      ${coverImageUrl ? `<img src="${coverImageUrl}" style="width:100%;border-radius:8px;margin-bottom:8px;max-height:150px;object-fit:cover">` : `<p class="muted" style="margin-bottom:8px">Ingen bilde valgt</p>`}
+      ${coverImageUrl ? `<img src="${coverImageUrl}" style="width:100%;border-radius:8px;margin-bottom:12px;max-height:150px;object-fit:cover">` : `<p class="muted" style="margin-bottom:12px">Ingen bilde valgt ennå.</p>`}
       <input type="file" id="cover-input" accept="image/*" style="display:none">
       <button class="btn" onclick="document.getElementById('cover-input').click()">Last opp forsidebilde</button>
       ${statusMsg ? `<p class="status">${statusMsg}</p>` : ''}
@@ -167,15 +174,17 @@ function recipeView() {
   const r = recipes.find(x => x.id === selected);
   if (!r) { view = 'home'; return homeView(); }
   const v = r.versions[selectedVersion];
-  const catName = CATEGORIES.find(c => c.id === r.category)?.name || r.category;
-  const tabs = r.versions.length > 1 ? `<div class="version-tabs">${r.versions.map((ver, i) =>
+  const catId = normCat(r.category);
+  const catName = CATEGORIES.find(c => c.id === catId)?.name || r.category;
+  const tabs = r.versions.length > 1 ? `<div class="version-tabs">${r.versions.map((ver,i) =>
     `<button class="btn version-tab ${i===selectedVersion?'active':''}" onclick="selVer(${i})">v${r.versions.length-i} · ${fmt(ver.date)}</button>`).join('')}</div>` : '';
   const imgs = (v.images||[]).map(img => `<img class="recipe-img" src="${img}" alt="">`).join('');
   return `
     <div class="topbar"><button class="btn" onclick="backFromRecipe()">← Tilbake</button>
-    <div class="gap"><button class="btn" onclick="addVersion()">+ Versjon</button><button class="btn" onclick="startEdit()">Rediger</button></div></div>
+    <div class="gap"><button class="btn" onclick="addVersion()">+ Versjon</button>
+    <button class="btn" onclick="startEdit()">Rediger</button></div></div>
     <p class="muted" style="margin-bottom:4px">${catName}</p>
-    <h2>${r.name}</h2>
+    <h2 style="margin-bottom:12px">${r.name}</h2>
     ${tabs}${imgs}
     ${v.notes ? `<div class="info-box">${v.notes}</div>` : ''}
     <div class="card"><p style="font-weight:500;margin-bottom:8px">Ingredienser</p><pre>${v.ingredients}</pre></div>
@@ -185,11 +194,12 @@ function recipeView() {
 function editView() {
   const v = editData.versions[0];
   const imgs = (v.images||[]).map(img => `<img class="recipe-img" src="${img}" alt="">`).join('');
+  const currentCat = normCat(editData.category);
   const catOptions = CATEGORIES.map(c =>
-    `<option value="${c.id}" ${editData.category === c.id ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('');
+    `<option value="${c.id}" ${currentCat===c.id?'selected':''}>${c.icon} ${c.name}</option>`).join('');
   return `
     <div class="topbar"><button class="btn" onclick="setView('home')">← Avbryt</button></div>
-    <h2>${editData.name || 'Ny oppskrift'}</h2>
+    <h2>${editData.name||'Ny oppskrift'}</h2>
     <div class="card">
       <label>Navn</label><input id="e-name" value="${editData.name}" placeholder="F.eks. Surdeigsbaguetter">
       <label>Kategori</label>
@@ -197,9 +207,9 @@ function editView() {
     </div>
     <div class="card">
       <p class="muted" style="margin-bottom:8px">Versjon – ${fmt(v.date)}</p>
-      <label>Ingredienser</label><textarea id="e-ing" rows="5" placeholder="500g hvetemel&#10;350g vann&#10;10g salt...">${v.ingredients}</textarea>
-      <label>Fremgangsmåte</label><textarea id="e-steps" rows="6" placeholder="1. Bland mel og vann...">${v.steps}</textarea>
-      <label>Notater / justeringer</label><textarea id="e-notes" rows="3" placeholder="Hva endret du denne gangen?">${v.notes}</textarea>
+      <label>Ingredienser</label><textarea id="e-ing" rows="5">${v.ingredients}</textarea>
+      <label>Fremgangsmåte</label><textarea id="e-steps" rows="6">${v.steps}</textarea>
+      <label>Notater / justeringer</label><textarea id="e-notes" rows="3">${v.notes}</textarea>
     </div>
     <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Bilder av resultatet</p>
@@ -208,28 +218,44 @@ function editView() {
     </div>
     ${statusMsg ? `<p class="status">${statusMsg}</p>` : ''}
     <button class="btn-primary" style="width:100%;margin-top:4px" onclick="handleSave()" ${loading?'disabled':''}>
-      ${loading ? 'Lagrer...' : 'Lagre oppskrift'}</button>`;
+      ${loading?'Lagrer...':'Lagre oppskrift'}</button>`;
+}
+
+function saveFormState() {
+  const n = document.getElementById('e-name');
+  const c = document.getElementById('e-cat');
+  const i = document.getElementById('e-ing');
+  const s = document.getElementById('e-steps');
+  const nt = document.getElementById('e-notes');
+  if (n) editData.name = n.value;
+  if (c) editData.category = c.value;
+  if (i) editData.versions[0].ingredients = i.value;
+  if (s) editData.versions[0].steps = s.value;
+  if (nt) editData.versions[0].notes = nt.value;
 }
 
 function bindEdit() {
   document.getElementById('img-input').addEventListener('change', async e => {
     const file = e.target.files[0]; if (!file) return;
+    saveFormState();
     setStatus('Laster opp bilde...');
     const url = await uploadImage(file);
     editData.versions[0].images = [...(editData.versions[0].images||[]), url];
     setStatus(''); render();
   });
-  const coverInput = document.getElementById('cover-input');
-  if (coverInput) {
-    coverInput.addEventListener('change', async e => {
-      const file = e.target.files[0]; if (!file) return;
-      setStatus('Laster opp forsidebilde...');
-      await uploadCoverImage(file);
-      setStatus('Forsidebilde lagret!');
-      setTimeout(() => setStatus(''), 2000);
-      render();
-    });
-  }
+}
+
+function bindSettings() {
+  const ci = document.getElementById('cover-input');
+  if (ci) ci.addEventListener('change', async e => {
+    const file = e.target.files[0]; if (!file) return;
+    setStatus('Laster opp forsidebilde...');
+    await uploadCoverImage(file);
+    sessionStorage.setItem('bakebok_cover', coverImageUrl);
+    setStatus('Forsidebilde lagret!');
+    setTimeout(() => { statusMsg = ''; render(); }, 2000);
+    render();
+  });
 }
 
 function setView(v) { view = v; statusMsg = ''; render(); }
@@ -243,7 +269,11 @@ function signIn() {
   const params = new URLSearchParams({ client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, response_type: 'token', scope: SCOPE, prompt: 'consent' });
   window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
-function signOut() { token = null; recipes = []; folderId = null; coverImageUrl = null; render(); }
+function signOut() {
+  token = null; recipes = []; folderId = null;
+  sessionStorage.removeItem('bakebok_token');
+  render();
+}
 
 function startNew() {
   editData = { id: `recipe_${Date.now()}`, name: '', category: '', versions: [{ date: new Date().toISOString(), notes: '', ingredients: '', steps: '', images: [] }] };
@@ -287,7 +317,7 @@ async function initDrive() {
   folderId = fid;
   await loadCoverImage();
   await loadRecipes();
-  loading = false; setStatus(''); render();
+  loading = false; statusMsg = ''; render();
 }
 
 async function loadRecipes() {
@@ -296,26 +326,26 @@ async function loadRecipes() {
     const r = await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`, { headers: { Authorization: `Bearer ${token}` } });
     return r.json();
   }));
-  recipes = all.sort((a, b) => new Date(b.versions[0].date) - new Date(a.versions[0].date));
+  recipes = all.sort((a,b) => new Date(b.versions[0].date) - new Date(a.versions[0].date));
 }
 
 async function loadCoverImage() {
-  const list = await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='cover.jpg' and trashed=false&fields=files(id,name)`);
+  const list = await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='cover.jpg' and trashed=false&fields=files(id)`);
   if (list.files?.[0]?.id) {
     coverFileId = list.files[0].id;
     coverImageUrl = `https://drive.google.com/thumbnail?id=${coverFileId}&sz=w800`;
+    sessionStorage.setItem('bakebok_cover', coverImageUrl);
   }
 }
 
 async function uploadCoverImage(file) {
   const form = new FormData();
-  const meta = coverFileId ? {} : { name: 'cover.jpg', parents: [folderId] };
-  form.append('metadata', new Blob([JSON.stringify(meta)], { type: 'application/json' }));
+  form.append('metadata', new Blob([JSON.stringify(coverFileId ? {} : { name: 'cover.jpg', parents: [folderId] })], { type: 'application/json' }));
   form.append('file', file);
-  const url = coverFileId
+  const res = await fetch(coverFileId
     ? `https://www.googleapis.com/upload/drive/v3/files/${coverFileId}?uploadType=multipart&fields=id`
-    : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id';
-  const res = await fetch(url, { method: coverFileId ? 'PATCH' : 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+    : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+    { method: coverFileId ? 'PATCH' : 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
   const data = await res.json();
   if (!coverFileId) {
     coverFileId = data.id;
@@ -335,9 +365,9 @@ async function saveRecipe(recipe) {
   await fetch(fileId
     ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
     : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-    { method: fileId ? 'PATCH' : 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+    { method: fileId?'PATCH':'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
   await loadRecipes();
-  loading = false; setStatus('Lagret!'); setTimeout(() => { setStatus(''); render(); }, 2000);
+  loading = false; setStatus('Lagret!'); setTimeout(() => { statusMsg = ''; render(); }, 2000);
 }
 
 async function uploadImage(file) {
@@ -350,10 +380,19 @@ async function uploadImage(file) {
   return `https://drive.google.com/thumbnail?id=${data.id}&sz=w600`;
 }
 
+// Håndter redirect og lagre token
 const hash = new URLSearchParams(window.location.hash.slice(1));
 const t = hash.get('access_token');
-if (t) { token = t; window.history.replaceState({}, '', window.location.pathname); initDrive(); }
-else { render(); }
+if (t) {
+  token = t;
+  sessionStorage.setItem('bakebok_token', t);
+  window.history.replaceState({}, '', window.location.pathname);
+  initDrive();
+} else if (token) {
+  initDrive();
+} else {
+  render();
+}
 </script>
 </body>
 </html>
