@@ -25,6 +25,7 @@
   .btn-primary:hover { background: #178a63; }
   .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
   .btn-danger { border: 0.5px solid #c0392b; border-radius: 8px; padding: 8px 16px; background: transparent; color: #c0392b; cursor: pointer; font-size: 14px; }
+  .btn-google { border: 0.5px solid #ccc; border-radius: 8px; padding: 10px 20px; background: #fff; color: #1a1a1a; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 8px; }
   input, textarea, select { width: 100%; border-radius: 8px; border: 0.5px solid #ccc; padding: 8px 12px; font-size: 14px; font-family: inherit; background: #fff; color: #1a1a1a; }
   input:focus, textarea:focus, select:focus { outline: none; border-color: #1D9E75; }
   label { font-size: 12px; color: #666; display: block; margin-bottom: 4px; margin-top: 12px; }
@@ -32,13 +33,9 @@
   .status { font-size: 13px; color: #666; margin: 8px 0; }
   .muted { font-size: 12px; color: #888; }
   .gap { display: flex; gap: 8px; flex-wrap: wrap; }
-  .version-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-  .version-tab { font-size: 12px; }
-  .version-tab.active { background: #f0f0e8; }
   pre { white-space: pre-wrap; font-family: inherit; font-size: 14px; line-height: 1.7; }
   img.recipe-img { width: 100%; border-radius: 8px; margin-bottom: 8px; }
   .info-box { background: #f0f0e8; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 12px; font-size: 13px; color: #555; }
-  code { font-size: 12px; background: #fff; padding: 4px 8px; border-radius: 4px; display: block; word-break: break-all; margin-top: 6px; }
   .hero { width: 100%; height: 180px; border-radius: 16px; overflow: hidden; margin-bottom: 1.25rem; cursor: pointer; }
   .hero img { width: 100%; height: 100%; object-fit: cover; }
   .hero-placeholder { width: 100%; height: 180px; border-radius: 16px; background: linear-gradient(135deg, #e8e4d8, #d4c9a8); margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: center; font-size: 48px; cursor: pointer; }
@@ -51,6 +48,7 @@
   .cat-count { font-size: 11px; opacity: 0.6; margin-top: 2px; display: block; }
   .cat-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 0.5px solid #e0e0d8; }
   .cat-row:last-child { border-bottom: none; }
+  .login-wrap { max-width: 400px; margin: 4rem auto; padding: 0 1rem; }
   @media print {
     .no-print { display: none !important; }
     body { background: #fff; }
@@ -62,12 +60,29 @@
 </style>
 </head>
 <body>
-<div class="app" id="app"></div>
-<script>
-const CLIENT_ID = '640046806972-7c9i1u5vemrok1timpeejhef1jnpdjiv.apps.googleusercontent.com';
-const FOLDER_NAME = 'Bakebok';
-const REDIRECT_URI = window.location.origin + window.location.pathname;
-const SCOPE = 'https://www.googleapis.com/auth/drive.file';
+<div id="root"></div>
+
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js';
+import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js';
+import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, query, where } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC8cmkZQXfPBFPeFy4ShYqOdCHRqKmkIng",
+  authDomain: "bakebok.firebaseapp.com",
+  projectId: "bakebok",
+  storageBucket: "bakebok.firebasestorage.app",
+  messagingSenderId: "518882951454",
+  appId: "1:518882951454:web:ce11e02c5a223f24aa890f",
+  measurementId: "G-QF76VZH8MC"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
+const googleProvider = new GoogleAuthProvider();
 
 const DEFAULT_CATEGORIES = [
   { id: 'gjærbrød',  name: 'Brød på gjær',    icon: '🍞' },
@@ -78,50 +93,70 @@ const DEFAULT_CATEGORIES = [
   { id: 'andre',     name: 'Andre bakverk',     icon: '🧁' },
 ];
 
-const CAT_ALIAS = {
-  'brød på gjær':'gjærbrød','gjærbrød':'gjærbrød',
-  'brød på surdeig':'surdeig','surdeig':'surdeig',
-  'søtbakst på gjær':'søtbakst','søtbakst':'søtbakst',
-  'kjeks og scones':'kjeks','kjeks':'kjeks','scones':'kjeks',
-  'kaker':'kaker','andre bakverk':'andre','andre':'andre',
-};
-
 function allCategories() { return [...DEFAULT_CATEGORIES, ...customCategories]; }
-function normCat(c) {
-  if (!c) return '';
-  const alias = CAT_ALIAS[c.toLowerCase()];
-  if (alias) return alias;
-  const custom = customCategories.find(x => x.id === c || x.name.toLowerCase() === c.toLowerCase());
-  return custom ? custom.id : c;
-}
-function getCatName(id) {
-  const cat = allCategories().find(c => c.id === id);
-  return cat ? cat.name : id;
-}
+function getCatName(id) { return allCategories().find(c=>c.id===id)?.name || id; }
 function fmt(iso) { return new Date(iso).toLocaleDateString('nb-NO',{day:'2-digit',month:'short',year:'numeric'}); }
 
-let token          = sessionStorage.getItem('bakebok_token') || null;
-let anthropicKey   = sessionStorage.getItem('bakebok_akey')  || null;
-let coverImageUrl  = sessionStorage.getItem('bakebok_cover') || null;
-let folderId       = null;
-let coverFileId    = null;
-let categoriesFileId = null;
-let recipes        = [];
+let currentUser = null;
+let recipes = [];
 let customCategories = [];
-let view           = 'home';
-let selected       = null;
+let coverImageUrl = sessionStorage.getItem('bakebok_cover') || null;
+let anthropicKey = sessionStorage.getItem('bakebok_akey') || null;
+let view = 'login';
+let selected = null;
 let selectedVersion = 0;
-let editData       = null;
-let loading        = false;
-let statusMsg      = '';
+let editData = null;
+let loading = false;
+let statusMsg = '';
 let activeCategory = null;
+let loginMode = 'choose';
 
 function render() {
-  const app = document.getElementById('app');
-  if      (view === 'settings') { app.innerHTML = settingsView(); bindSettings(); }
-  else if (view === 'edit')     { app.innerHTML = editView();     bindEdit(); }
-  else if (view === 'recipe')   { app.innerHTML = recipeView(); }
-  else                          { app.innerHTML = homeView(); }
+  const root = document.getElementById('root');
+  if (view === 'login') { root.innerHTML = loginView(); bindLogin(); return; }
+  root.innerHTML = `<div class="app">${
+    view === 'settings' ? settingsView() :
+    view === 'edit' ? editView() :
+    view === 'recipe' ? recipeView() :
+    homeView()
+  }</div>`;
+  if (view === 'edit') bindEdit();
+  if (view === 'settings') bindSettings();
+}
+
+function loginView() {
+  if (loginMode === 'email') return `
+    <div class="login-wrap">
+      <h1 style="margin-bottom:1.5rem">🍞 Bakebok</h1>
+      <div class="card">
+        <p style="font-weight:500;margin-bottom:12px">Logg inn med e-post</p>
+        <label>E-postadresse</label>
+        <input type="email" id="l-email" placeholder="din@epost.no">
+        <label>Passord</label>
+        <input type="password" id="l-pass" placeholder="Passord">
+        ${statusMsg?`<p class="status" style="color:#c0392b">${statusMsg}</p>`:''}
+        <button class="btn-primary" style="width:100%;margin-top:12px" onclick="doEmailLogin()">Logg inn</button>
+        <button class="btn" style="width:100%;margin-top:8px" onclick="loginMode='choose';statusMsg='';render()">← Tilbake</button>
+      </div>
+    </div>`;
+
+  return `
+    <div class="login-wrap">
+      <div style="text-align:center;margin-bottom:2rem">
+        <div style="font-size:48px;margin-bottom:8px">🍞</div>
+        <h1>Bakebok</h1>
+        <p class="muted" style="margin-top:4px">Din digitale oppskriftsbok</p>
+      </div>
+      <div class="card">
+        <button class="btn-google" style="width:100%;justify-content:center;margin-bottom:8px" onclick="doGoogleLogin()">
+          <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/></svg>
+          Logg inn med Google
+        </button>
+        <div style="text-align:center;margin:8px 0;font-size:12px;color:#888">eller</div>
+        <button class="btn" style="width:100%" onclick="loginMode='email';render()">Logg inn med e-post</button>
+      </div>
+      ${statusMsg?`<p class="status" style="color:#c0392b;text-align:center">${statusMsg}</p>`:''}
+    </div>`;
 }
 
 function homeView() {
@@ -129,15 +164,8 @@ function homeView() {
     ? `<div class="hero" onclick="goHome()"><img src="${coverImageUrl}" alt="Forsidebilde"></div>`
     : `<div class="hero-placeholder" onclick="goHome()">🍞</div>`;
 
-  if (!token) return `${hero}
-    <div class="topbar" style="padding-top:0"><h1>Bakebok</h1>
-    <button class="btn" onclick="setView('settings')">Innstillinger</button></div>
-    <div class="card"><p style="margin-bottom:12px">Logg inn med Google for å synkronisere oppskriftene dine.</p>
-    <button class="btn-primary" onclick="signIn()">Logg inn med Google</button></div>
-    ${statusMsg ? `<p class="status">${statusMsg}</p>` : ''}`;
-
   const catGrid = allCategories().map(c => {
-    const count = recipes.filter(r => normCat(r.category) === c.id).length;
+    const count = recipes.filter(r=>r.category===c.id).length;
     return `<button class="cat-btn ${activeCategory===c.id?'active':''}" onclick="selectCat('${c.id}')">
       <span class="cat-icon">${c.icon}</span>
       <span class="cat-name">${c.name}</span>
@@ -145,15 +173,15 @@ function homeView() {
     </button>`;
   }).join('');
 
-  const filtered = activeCategory ? recipes.filter(r => normCat(r.category) === activeCategory) : [];
+  const filtered = activeCategory ? recipes.filter(r=>r.category===activeCategory) : [];
   const catLabel = activeCategory ? getCatName(activeCategory) : '';
 
   const recipeList = activeCategory ? `
     <button class="btn" style="margin-bottom:12px" onclick="selectCat(null)">← Alle kategorier</button>
     <h2 style="margin-bottom:12px">${catLabel}</h2>
-    ${filtered.length===0 ? `<div class="info-box">Ingen oppskrifter i denne kategorien ennå.</div>` : ''}
-    ${filtered.map(r => {
-      const thumb = r.versions.find(v=>v.images&&v.images.length>0)?.images[0]||null;
+    ${filtered.length===0?`<div class="info-box">Ingen oppskrifter i denne kategorien ennå.</div>`:''}
+    ${filtered.map(r=>{
+      const thumb=r.versions.find(v=>v.images&&v.images.length>0)?.images[0]||null;
       return `<div class="card card-clickable" onclick="openRecipe('${r.id}')" style="display:flex;align-items:center;gap:12px">
         <div style="flex:1;min-width:0">
           <p style="font-weight:500">${r.name}</p>
@@ -164,7 +192,7 @@ function homeView() {
     }).join('')}` : '';
 
   return `${hero}
-    <div class="topbar" style="padding-top:0"><h1>Bakebok</h1>
+    <div class="topbar no-print" style="padding-top:0"><h1>Bakebok</h1>
     <div class="gap">
       <button class="btn" onclick="setView('settings')">Innstillinger</button>
       <button class="btn-primary" onclick="startNew()">+ Ny</button>
@@ -175,27 +203,26 @@ function homeView() {
 }
 
 function settingsView() {
-  const customList = customCategories.length === 0
+  const customList = customCategories.length===0
     ? `<p class="muted" style="margin-bottom:12px">Ingen egne kategorier ennå.</p>`
-    : customCategories.map(c => `
+    : customCategories.map(c=>`
         <div class="cat-row">
           <span style="font-size:14px">${c.icon} ${c.name}</span>
           <button class="btn-danger" style="padding:4px 10px;font-size:12px" onclick="deleteCustomCat('${c.id}')">Slett</button>
         </div>`).join('');
-
   return `
-    <div class="topbar"><button class="btn" onclick="setView('home')">← Tilbake</button></div>
+    <div class="topbar no-print"><button class="btn" onclick="setView('home')">← Tilbake</button></div>
     <h2>Innstillinger</h2>
     <div class="card">
-      <p style="font-size:13px;margin-bottom:8px">Status: ${token?'✅ Google Drive tilkoblet':'❌ Ikke innlogget'}</p>
-      ${token?`<button class="btn" onclick="signOut()">Logg ut</button>`:`<button class="btn-primary" onclick="signIn()">Logg inn med Google</button>`}
+      <p style="font-size:13px;margin-bottom:4px">Innlogget som: <strong>${currentUser?.email||''}</strong></p>
+      <button class="btn" style="margin-top:8px" onclick="doSignOut()">Logg ut</button>
     </div>
-    ${token?`<div class="card">
+    <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Forsidebilde</p>
       ${coverImageUrl?`<img src="${coverImageUrl}" style="width:100%;border-radius:8px;margin-bottom:12px;max-height:150px;object-fit:cover">`:`<p class="muted" style="margin-bottom:12px">Ingen bilde valgt ennå.</p>`}
       <input type="file" id="cover-input" accept="image/*" style="display:none">
       <button class="btn" onclick="document.getElementById('cover-input').click()">Last opp forsidebilde</button>
-    </div>`:''}
+    </div>
     <div class="card">
       <p style="font-weight:500;margin-bottom:12px">Egne kategorier</p>
       ${customList}
@@ -207,28 +234,27 @@ function settingsView() {
     </div>
     <div class="card">
       <p style="font-weight:500;margin-bottom:6px">Claude API-nøkkel</p>
-      <p class="muted" style="margin-bottom:8px">Brukes til å lese oppskrifter fra bilder. Lagres i Drive.</p>
-      ${anthropicKey?`<p style="font-size:13px;color:#1D9E75;margin-bottom:8px">✅ API-nøkkel er lagret</p>`:`<p style="font-size:13px;color:#c0392b;margin-bottom:8px">❌ Ingen API-nøkkel funnet</p>`}
+      <p class="muted" style="margin-bottom:8px">Brukes til å lese oppskrifter fra bilder.</p>
+      ${anthropicKey?`<p style="font-size:13px;color:#1D9E75;margin-bottom:8px">✅ API-nøkkel er lagret</p>`:`<p style="font-size:13px;color:#c0392b;margin-bottom:8px">❌ Ingen API-nøkkel</p>`}
       <input type="password" id="akey-input" placeholder="sk-ant-...">
       <button class="btn-primary" style="margin-top:10px;width:100%" onclick="saveApiKey()">Lagre nøkkel</button>
     </div>
-    ${statusMsg?`<p class="status">${statusMsg}</p>`:''}
-    <div class="info-box">Redirect URI:<code>${REDIRECT_URI}</code></div>`;
+    ${statusMsg?`<p class="status">${statusMsg}</p>`:''}`;
 }
 
 function recipeView() {
   const r = recipes.find(x=>x.id===selected);
   if (!r) { view='home'; return homeView(); }
   const v = r.versions[selectedVersion];
-  const catName = getCatName(normCat(r.category));
-  const tabs = r.versions.length>1?`<div class="version-tabs">${r.versions.map((ver,i)=>
-    `<button class="btn version-tab ${i===selectedVersion?'active':''}" onclick="selVer(${i})">v${r.versions.length-i} · ${fmt(ver.date)}</button>`).join('')}</div>`:'';
-  const imgs = (v.images||[]).map(img=>`<img class="recipe-img" src="${img}" alt="">`).join('');
+  const catName = getCatName(r.category);
+  const tabs = r.versions.length>1?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${r.versions.map((ver,i)=>
+    `<button class="btn ${i===selectedVersion?'':'.'}" style="font-size:12px;${i===selectedVersion?'background:#f0f0e8':''}" onclick="selVer(${i})">v${r.versions.length-i} · ${fmt(ver.date)}</button>`).join('')}</div>`:'';
+  const imgs=(v.images||[]).map(img=>`<img class="recipe-img" src="${img}" alt="">`).join('');
   return `
     <div class="topbar no-print"><button class="btn" onclick="backFromRecipe()">← Tilbake</button>
     <div class="gap">
       <button class="btn" onclick="startEdit()">Rediger</button>
-      <button class="btn" onclick="window.print()">🖨 Skriv ut</button>
+      <button class="btn no-print" onclick="window.print()">🖨 Skriv ut</button>
       <button class="btn-danger" onclick="confirmDelete()">Slett</button>
     </div></div>
     <p class="muted" style="margin-bottom:4px">${catName}</p>
@@ -241,9 +267,8 @@ function recipeView() {
 
 function editView() {
   const v = editData.versions[0];
-  const imgs = (v.images||[]).map(img=>`<img class="recipe-img" src="${img}" alt="">`).join('');
-  const currentCat = normCat(editData.category);
-  const catOptions = allCategories().map(c=>`<option value="${c.id}" ${currentCat===c.id?'selected':''}>${c.icon} ${c.name}</option>`).join('');
+  const imgs=(v.images||[]).map(img=>`<img class="recipe-img" src="${img}" alt="">`).join('');
+  const catOptions=allCategories().map(c=>`<option value="${c.id}" ${editData.category===c.id?'selected':''}>${c.icon} ${c.name}</option>`).join('');
   return `
     <div class="topbar"><button class="btn" onclick="setView('home')">← Avbryt</button></div>
     <h2>${editData.name||'Ny oppskrift'}</h2>
@@ -283,326 +308,207 @@ function editView() {
       ${loading?'Lagrer...':'Lagre oppskrift'}</button>`;
 }
 
+function bindLogin() {
+  document.getElementById('root').addEventListener('keydown', e => {
+    if (e.key==='Enter' && loginMode==='email') doEmailLogin();
+  });
+}
+
 function bindEdit() {
-  document.getElementById('img-input').addEventListener('change', e => handleImageFile(e.target.files[0]));
-  document.getElementById('cam-input').addEventListener('change', e => handleImageFile(e.target.files[0]));
-  document.getElementById('scan-input').addEventListener('change', e => scanRecipe(e.target.files[0]));
-  document.getElementById('scan-cam').addEventListener('change', e => scanRecipe(e.target.files[0]));
+  document.getElementById('img-input').addEventListener('change', e=>handleImageFile(e.target.files[0]));
+  document.getElementById('cam-input').addEventListener('change', e=>handleImageFile(e.target.files[0]));
+  document.getElementById('scan-input').addEventListener('change', e=>scanRecipe(e.target.files[0]));
+  document.getElementById('scan-cam').addEventListener('change', e=>scanRecipe(e.target.files[0]));
 }
 
 function bindSettings() {
-  const ci = document.getElementById('cover-input');
-  if (ci) ci.addEventListener('change', async e => {
-    const file = e.target.files[0]; if (!file) return;
+  const ci=document.getElementById('cover-input');
+  if(ci) ci.addEventListener('change', async e=>{
+    const file=e.target.files[0]; if(!file) return;
     setStatus('Laster opp forsidebilde...');
-    await uploadCoverImage(file);
-    sessionStorage.setItem('bakebok_cover', coverImageUrl);
+    const url=await uploadFile(file,'cover/cover.jpg');
+    coverImageUrl=url;
+    sessionStorage.setItem('bakebok_cover',url);
     setStatus('Forsidebilde lagret!');
-    setTimeout(()=>{ statusMsg=''; render(); }, 2000);
+    setTimeout(()=>{statusMsg='';render();},2000);
     render();
   });
 }
 
-function setView(v) { view=v; statusMsg=''; render(); }
-function goHome() { activeCategory=null; view='home'; render(); }
-function openRecipe(id) { selected=id; selectedVersion=0; view='recipe'; render(); }
-function selVer(i) { selectedVersion=i; render(); }
-function setStatus(s) { statusMsg=s; render(); }
-function selectCat(id) { activeCategory=id; render(); }
-function backFromRecipe() { view='home'; render(); }
-
-function signIn() {
-  const p = new URLSearchParams({client_id:CLIENT_ID,redirect_uri:REDIRECT_URI,response_type:'token',scope:SCOPE,prompt:'consent'});
-  window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${p}`;
+// Auth
+async function doGoogleLogin() {
+  try { await signInWithPopup(auth, googleProvider); }
+  catch(e) { statusMsg='Innlogging feilet. Prøv igjen.'; render(); }
 }
-function signOut() {
-  token=null; recipes=[]; folderId=null;
-  sessionStorage.removeItem('bakebok_token');
-  render();
+async function doEmailLogin() {
+  const email=document.getElementById('l-email')?.value.trim();
+  const pass=document.getElementById('l-pass')?.value;
+  if(!email||!pass){statusMsg='Fyll inn e-post og passord.';render();return;}
+  try { await signInWithEmailAndPassword(auth,email,pass); }
+  catch(e) {
+    try { await createUserWithEmailAndPassword(auth,email,pass); }
+    catch(e2) { statusMsg='Feil e-post eller passord.'; render(); }
+  }
 }
+async function doSignOut() { await signOut(auth); }
 
-async function addCustomCat() {
-  const nameEl = document.getElementById('new-cat-name');
-  const iconEl = document.getElementById('new-cat-icon');
-  const name = nameEl.value.trim();
-  const icon = iconEl.value.trim() || '🫙';
-  if (!name) { setStatus('Skriv inn et kategorinavn.'); return; }
-  const id = 'custom_' + name.toLowerCase().replace(/\s+/g,'_') + '_' + Date.now();
-  customCategories.push({ id, name, icon });
-  await saveCustomCategories();
-  setStatus('Kategori lagt til!');
-  setTimeout(()=>{ statusMsg=''; render(); }, 1500);
-  render();
+// Firestore
+async function loadRecipes() {
+  const snap=await getDocs(collection(db,'recipes'));
+  recipes=snap.docs.map(d=>({id:d.id,...d.data()}))
+    .sort((a,b)=>new Date(b.versions[0].date)-new Date(a.versions[0].date));
 }
-
-async function deleteCustomCat(id) {
-  if (!confirm('Slette denne kategorien?')) return;
-  customCategories = customCategories.filter(c => c.id !== id);
-  await saveCustomCategories();
-  render();
-}
-
-async function saveCustomCategories() {
-  try {
-    const blob = new Blob([JSON.stringify(customCategories)], {type:'application/json'});
-    const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(categoriesFileId?{}:{name:'categories.json',parents:[folderId]})], {type:'application/json'}));
-    form.append('file', blob);
-    const res = await fetch(categoriesFileId
-      ? `https://www.googleapis.com/upload/drive/v3/files/${categoriesFileId}?uploadType=multipart&fields=id`
-      : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
-      {method:categoriesFileId?'PATCH':'POST', headers:{Authorization:`Bearer ${token}`}, body:form});
-    const data = await res.json();
-    if (!categoriesFileId) categoriesFileId = data.id;
-  } catch(e) {}
-}
-
 async function loadCustomCategories() {
-  try {
-    const list = await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='categories.json' and trashed=false&fields=files(id)`);
-    if (list.files?.[0]?.id) {
-      categoriesFileId = list.files[0].id;
-      const r = await fetch(`https://www.googleapis.com/drive/v3/files/${categoriesFileId}?alt=media`, {headers:{Authorization:`Bearer ${token}`}});
-      customCategories = await r.json();
-    }
-  } catch(e) {}
+  const snap=await getDocs(collection(db,'categories'));
+  customCategories=snap.docs.map(d=>({id:d.id,...d.data()}));
 }
-
 async function loadApiKey() {
-  try {
-    const list = await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='apikey.txt' and trashed=false&fields=files(id)`);
-    if (list.files?.[0]?.id) {
-      const r = await fetch(`https://www.googleapis.com/drive/v3/files/${list.files[0].id}?alt=media`, {headers:{Authorization:`Bearer ${token}`}});
-      const key = await r.text();
-      if (key) { anthropicKey=key.trim(); sessionStorage.setItem('bakebok_akey', anthropicKey); }
-    }
-  } catch(e) {}
+  const snap=await getDocs(collection(db,'settings'));
+  const keyDoc=snap.docs.find(d=>d.id==='apikey');
+  if(keyDoc){anthropicKey=keyDoc.data().key;sessionStorage.setItem('bakebok_akey',anthropicKey);}
 }
-
+async function saveRecipeToDb(recipe) {
+  await setDoc(doc(db,'recipes',recipe.id),recipe);
+  await loadRecipes();
+}
+async function deleteRecipeFromDb(id) {
+  await deleteDoc(doc(db,'recipes',id));
+  await loadRecipes();
+}
 async function saveApiKey() {
-  const k = document.getElementById('akey-input').value.trim();
-  if (!k) { setStatus('Lim inn en API-nøkkel først.'); return; }
-  setStatus('Lagrer nøkkel...');
-  try {
-    anthropicKey = k;
-    sessionStorage.setItem('bakebok_akey', k);
-    const list = await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='apikey.txt' and trashed=false&fields=files(id)`);
-    const fileId = list.files?.[0]?.id;
-    const blob = new Blob([k], {type:'text/plain'});
-    const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(fileId?{}:{name:'apikey.txt',parents:[folderId]})], {type:'application/json'}));
-    form.append('file', blob);
-    await fetch(fileId
-      ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
-      : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-      {method:fileId?'PATCH':'POST', headers:{Authorization:`Bearer ${token}`}, body:form});
-    setStatus('API-nøkkel lagret!');
-    setTimeout(()=>{statusMsg='';render();}, 2000);
-  } catch(e) { setStatus('Feil ved lagring.'); }
+  const k=document.getElementById('akey-input').value.trim();
+  if(!k){setStatus('Lim inn en API-nøkkel først.');return;}
+  anthropicKey=k; sessionStorage.setItem('bakebok_akey',k);
+  await setDoc(doc(db,'settings','apikey'),{key:k});
+  setStatus('API-nøkkel lagret!');
+  setTimeout(()=>{statusMsg='';render();},2000);
+}
+async function addCustomCat() {
+  const name=document.getElementById('new-cat-name').value.trim();
+  const icon=document.getElementById('new-cat-icon').value.trim()||'🫙';
+  if(!name){setStatus('Skriv inn et kategorinavn.');return;}
+  const id='custom_'+name.toLowerCase().replace(/\s+/g,'_')+'_'+Date.now();
+  const cat={id,name,icon};
+  await setDoc(doc(db,'categories',id),cat);
+  customCategories.push(cat);
+  setStatus('Kategori lagt til!');
+  setTimeout(()=>{statusMsg='';render();},1500);
+  render();
+}
+async function deleteCustomCat(id) {
+  if(!confirm('Slette denne kategorien?')) return;
+  await deleteDoc(doc(db,'categories',id));
+  customCategories=customCategories.filter(c=>c.id!==id);
+  render();
 }
 
+// Storage
+async function uploadFile(file, path) {
+  const storageRef=ref(storage,path);
+  await uploadBytes(storageRef,file);
+  return getDownloadURL(storageRef);
+}
+async function handleImageFile(file) {
+  if(!file) return;
+  saveFormState();
+  setStatus('Laster opp bilde...');
+  const url=await uploadFile(file,`images/${Date.now()}_${file.name}`);
+  editData.versions[0].images=[...(editData.versions[0].images||[]),url];
+  setStatus(''); render();
+}
+
+// Actions
+function setView(v){view=v;statusMsg='';render();}
+function goHome(){activeCategory=null;view='home';render();}
+function openRecipe(id){selected=id;selectedVersion=0;view='recipe';render();}
+function selVer(i){selectedVersion=i;render();}
+function setStatus(s){statusMsg=s;render();}
+function selectCat(id){activeCategory=id;render();}
+function backFromRecipe(){view='home';render();}
+
+function startNew() {
+  editData={id:`recipe_${Date.now()}`,name:'',category:'',versions:[{date:new Date().toISOString(),notes:'',ingredients:'',steps:'',images:[]}]};
+  view='edit';render();
+}
+function startEdit() {
+  editData=JSON.parse(JSON.stringify(recipes.find(r=>r.id===selected)));
+  view='edit';render();
+}
+function addVersion() {
+  const r=recipes.find(x=>x.id===selected);
+  editData=JSON.parse(JSON.stringify(r));
+  editData.versions.unshift({date:new Date().toISOString(),notes:'',ingredients:editData.versions[0].ingredients,steps:editData.versions[0].steps,images:[]});
+  view='edit';render();
+}
 function saveFormState() {
   const n=document.getElementById('e-name');
   const c=document.getElementById('e-cat');
   const i=document.getElementById('e-ing');
   const s=document.getElementById('e-steps');
   const nt=document.getElementById('e-notes');
-  if(n) editData.name=n.value;
-  if(c) editData.category=c.value;
-  if(i) editData.versions[0].ingredients=i.value;
-  if(s) editData.versions[0].steps=s.value;
-  if(nt) editData.versions[0].notes=nt.value;
+  if(n)editData.name=n.value;
+  if(c)editData.category=c.value;
+  if(i)editData.versions[0].ingredients=i.value;
+  if(s)editData.versions[0].steps=s.value;
+  if(nt)editData.versions[0].notes=nt.value;
 }
-
-function startNew() {
-  editData={id:`recipe_${Date.now()}`,name:'',category:'',versions:[{date:new Date().toISOString(),notes:'',ingredients:'',steps:'',images:[]}]};
-  view='edit'; render();
-}
-function startEdit() {
-  editData=JSON.parse(JSON.stringify(recipes.find(r=>r.id===selected)));
-  view='edit'; render();
-}
-function addVersion() {
-  const r=recipes.find(x=>x.id===selected);
-  editData=JSON.parse(JSON.stringify(r));
-  editData.versions.unshift({date:new Date().toISOString(),notes:'',ingredients:editData.versions[0].ingredients,steps:editData.versions[0].steps,images:[]});
-  view='edit'; render();
-}
-
 async function handleSave() {
-  editData.name=document.getElementById('e-name').value;
-  editData.category=document.getElementById('e-cat').value;
-  editData.versions[0].ingredients=document.getElementById('e-ing').value;
-  editData.versions[0].steps=document.getElementById('e-steps').value;
-  editData.versions[0].notes=document.getElementById('e-notes').value;
+  saveFormState();
   if(!editData.name.trim()){setStatus('Gi oppskriften et navn.');return;}
-  await saveRecipe(editData);
-  view='home'; editData=null; render();
+  loading=true;setStatus('Lagrer...');
+  await saveRecipeToDb(editData);
+  loading=false;view='home';editData=null;render();
 }
-
 async function confirmDelete() {
   const r=recipes.find(x=>x.id===selected);
-  if(!r) return;
-  if(!confirm(`Vil du slette "${r.name}"? Dette kan ikke angres.`)) return;
-  setStatus('Sletter...');
-  const existing=await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='${r.id}.json' and trashed=false&fields=files(id)`);
-  const fileId=existing.files?.[0]?.id;
-  if(fileId) await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`,{method:'DELETE',headers:{Authorization:`Bearer ${token}`}});
-  await loadRecipes();
-  view='home'; statusMsg=''; render();
+  if(!r||!confirm(`Vil du slette "${r.name}"?`)) return;
+  await deleteRecipeFromDb(r.id);
+  view='home';render();
 }
 
-function toBase64(file) {
-  return new Promise((res,rej)=>{
-    const r=new FileReader();
-    r.onload=()=>res(r.result.split(',')[1]);
-    r.onerror=rej;
-    r.readAsDataURL(file);
-  });
+// Scan
+function toBase64(file){
+  return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
 }
-
 async function scanRecipe(file) {
   if(!file) return;
   if(!anthropicKey){setStatus('Legg inn Claude API-nøkkel i innstillinger først.');return;}
-  saveFormState();
-  setStatus('Leser oppskrift fra bilde...');
+  saveFormState();setStatus('Leser oppskrift fra bilde...');
   const b64=await toBase64(file);
-  const mediaType=file.type||'image/jpeg';
   try {
     const res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{
-        'x-api-key':anthropicKey,
-        'anthropic-version':'2023-06-01',
-        'content-type':'application/json',
-        'anthropic-dangerous-direct-browser-access':'true'
-      },
-      body:JSON.stringify({
-        model:'claude-haiku-4-5-20251001',
-        max_tokens:1024,
-        messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:mediaType,data:b64}},
-          {type:'text',text:'Dette er et bilde av en oppskrift. Trekk ut informasjonen og returner KUN gyldig JSON (ingen forklaring, ingen markdown) med disse feltene: {"name":"oppskriftsnavn","ingredients":"ingredienser som tekst med linjeskift","steps":"fremgangsmåte som nummerert tekst med linjeskift","notes":"eventuelle notater eller tips"}. Hvis noe mangler, bruk tom streng.'}
-        ]}]
-      })
+      headers:{'x-api-key':anthropicKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1024,messages:[{role:'user',content:[
+        {type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:b64}},
+        {type:'text',text:'Dette er et bilde av en oppskrift. Returner KUN gyldig JSON: {"name":"","ingredients":"","steps":"","notes":""}'}
+      ]}]})
     });
     const data=await res.json();
-    const text=data.content?.[0]?.text||'';
-    const parsed=JSON.parse(text.replace(/```json|```/g,'').trim());
-    if(parsed.name){editData.name=parsed.name; document.getElementById('e-name').value=parsed.name;}
-    if(parsed.ingredients){editData.versions[0].ingredients=parsed.ingredients; document.getElementById('e-ing').value=parsed.ingredients;}
-    if(parsed.steps){editData.versions[0].steps=parsed.steps; document.getElementById('e-steps').value=parsed.steps;}
-    if(parsed.notes){editData.versions[0].notes=parsed.notes; document.getElementById('e-notes').value=parsed.notes;}
+    const parsed=JSON.parse(data.content?.[0]?.text.replace(/```json|```/g,'').trim()||'{}');
+    if(parsed.name){editData.name=parsed.name;document.getElementById('e-name').value=parsed.name;}
+    if(parsed.ingredients){editData.versions[0].ingredients=parsed.ingredients;document.getElementById('e-ing').value=parsed.ingredients;}
+    if(parsed.steps){editData.versions[0].steps=parsed.steps;document.getElementById('e-steps').value=parsed.steps;}
+    if(parsed.notes){editData.versions[0].notes=parsed.notes;document.getElementById('e-notes').value=parsed.notes;}
     setStatus('Oppskrift lest! Sjekk og juster feltene.');
-  } catch(e) { setStatus('Kunne ikke lese oppskriften. Prøv igjen.'); }
+  } catch(e){setStatus('Kunne ikke lese oppskriften. Prøv igjen.');}
 }
 
-async function driveReq(url,opts={}) {
-  const res=await fetch(url,{...opts,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',...(opts.headers||{})}});
-  return res.json();
-}
-
-async function initDrive() {
-  loading=true; setStatus('Kobler til Google Drive...');
-  const list=await driveReq(`https://www.googleapis.com/drive/v3/files?q=name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name)`);
-  let fid=list.files?.[0]?.id;
-  if(!fid){
-    const f=await driveReq('https://www.googleapis.com/drive/v3/files',{method:'POST',body:JSON.stringify({name:FOLDER_NAME,mimeType:'application/vnd.google-apps.folder'})});
-    fid=f.id;
+// Init
+onAuthStateChanged(auth, async user => {
+  currentUser=user;
+  if(user){
+    loading=true;view='home';render();
+    await Promise.all([loadRecipes(),loadCustomCategories(),loadApiKey()]);
+    loading=false;render();
+  } else {
+    view='login';loginMode='choose';recipes=[];customCategories=[];render();
   }
-  folderId=fid;
-  await loadCoverImage();
-  await loadApiKey();
-  await loadCustomCategories();
-  await loadRecipes();
-  loading=false; statusMsg=''; render();
-}
+});
 
-async function loadRecipes() {
-  const list=await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and mimeType='application/json' and trashed=false&fields=files(id,name)`);
-  const all=await Promise.all((list.files||[]).filter(f=>f.name!=='categories.json').map(async f=>{
-    try {
-      const r=await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,{headers:{Authorization:`Bearer ${token}`}});
-      const data=await r.json();
-      if(data.versions) return data;
-      return null;
-    } catch(e){ return null; }
-  }));
-  recipes=all.filter(Boolean).sort((a,b)=>new Date(b.versions[0].date)-new Date(a.versions[0].date));
-}
-
-async function loadCoverImage() {
-  const list=await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='cover.jpg' and trashed=false&fields=files(id)`);
-  if(list.files?.[0]?.id){
-    coverFileId=list.files[0].id;
-    coverImageUrl=`https://drive.google.com/thumbnail?id=${coverFileId}&sz=w800`;
-    sessionStorage.setItem('bakebok_cover',coverImageUrl);
-  }
-}
-
-async function uploadCoverImage(file) {
-  const form=new FormData();
-  form.append('metadata',new Blob([JSON.stringify(coverFileId?{}:{name:'cover.jpg',parents:[folderId]})],{type:'application/json'}));
-  form.append('file',file);
-  const res=await fetch(coverFileId
-    ?`https://www.googleapis.com/upload/drive/v3/files/${coverFileId}?uploadType=multipart&fields=id`
-    :'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
-    {method:coverFileId?'PATCH':'POST',headers:{Authorization:`Bearer ${token}`},body:form});
-  const data=await res.json();
-  if(!coverFileId){
-    coverFileId=data.id;
-    await driveReq(`https://www.googleapis.com/drive/v3/files/${coverFileId}/permissions`,{method:'POST',body:JSON.stringify({role:'reader',type:'anyone'})});
-  }
-  coverImageUrl=`https://drive.google.com/thumbnail?id=${coverFileId}&sz=w800&t=${Date.now()}`;
-}
-
-async function handleImageFile(file) {
-  if(!file) return;
-  saveFormState();
-  setStatus('Laster opp bilde...');
-  const url=await uploadImage(file);
-  editData.versions[0].images=[...(editData.versions[0].images||[]),url];
-  setStatus(''); render();
-}
-
-async function saveRecipe(recipe) {
-  loading=true; setStatus('Lagrer...');
-  const existing=await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name='${recipe.id}.json' and trashed=false&fields=files(id)`);
-  const fileId=existing.files?.[0]?.id;
-  const blob=new Blob([JSON.stringify(recipe)],{type:'application/json'});
-  const form=new FormData();
-  form.append('metadata',new Blob([JSON.stringify(fileId?{}:{name:`${recipe.id}.json`,parents:[folderId]})],{type:'application/json'}));
-  form.append('file',blob);
-  await fetch(fileId
-    ?`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
-    :'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
-    {method:fileId?'PATCH':'POST',headers:{Authorization:`Bearer ${token}`},body:form});
-  await loadRecipes();
-  loading=false; setStatus('Lagret!'); setTimeout(()=>{statusMsg='';render();},2000);
-}
-
-async function uploadImage(file) {
-  const form=new FormData();
-  form.append('metadata',new Blob([JSON.stringify({name:file.name,parents:[folderId]})],{type:'application/json'}));
-  form.append('file',file);
-  const res=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',{method:'POST',headers:{Authorization:`Bearer ${token}`},body:form});
-  const data=await res.json();
-  await driveReq(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions`,{method:'POST',body:JSON.stringify({role:'reader',type:'anyone'})});
-  return `https://drive.google.com/thumbnail?id=${data.id}&sz=w600`;
-}
-
-const hash=new URLSearchParams(window.location.hash.slice(1));
-const t=hash.get('access_token');
-if(t){
-  token=t;
-  sessionStorage.setItem('bakebok_token',t);
-  window.history.replaceState({},'',window.location.pathname);
-  initDrive();
-} else if(token){
-  initDrive();
-} else {
-  render();
-}
+// Expose to window
+Object.assign(window,{doGoogleLogin,doEmailLogin,doSignOut,setView,goHome,openRecipe,selVer,setStatus,selectCat,backFromRecipe,startNew,startEdit,addVersion,handleSave,confirmDelete,addCustomCat,deleteCustomCat,saveApiKey,loginMode});
+Object.defineProperty(window,'loginMode',{get:()=>loginMode,set:v=>loginMode=v});
 </script>
 </body>
 </html>
