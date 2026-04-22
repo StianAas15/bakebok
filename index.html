@@ -57,6 +57,7 @@
     .app { padding: 0; }
     .card { border: none; padding: 0; margin-bottom: 1rem; }
     pre { font-size: 12px; }
+    img.recipe-img { max-height: 180px; width: auto; object-fit: cover; }
   }
 </style>
 </head>
@@ -226,7 +227,6 @@ function recipeView() {
   return `
     <div class="topbar no-print"><button class="btn" onclick="backFromRecipe()">← Tilbake</button>
     <div class="gap">
-      <button class="btn" onclick="addVersion()">+ Versjon</button>
       <button class="btn" onclick="startEdit()">Rediger</button>
       <button class="btn" onclick="window.print()">🖨 Skriv ut</button>
       <button class="btn-danger" onclick="confirmDelete()">Slett</button>
