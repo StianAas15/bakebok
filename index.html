@@ -48,7 +48,8 @@
   .cat-count { font-size: 11px; opacity: 0.6; margin-top: 2px; display: block; }
   .cat-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 0.5px solid #e0e0d8; }
   .cat-row:last-child { border-bottom: none; }
-  .login-wrap { max-width: 400px; margin: 4rem auto; padding: 0 1rem; }
+  .login-wrap { max-width: 400px; margin: 4rem auto; padding: 0 1rem; width: 100%; }
+  #root { width: 100%; }
   @media print {
     .no-print { display: none !important; }
     body { background: #fff; }
@@ -153,7 +154,7 @@ function loginView() {
           Logg inn med Google
         </button>
         <div style="text-align:center;margin:8px 0;font-size:12px;color:#888">eller</div>
-        <button class="btn" style="width:100%" onclick="loginMode='email';render()">Logg inn med e-post</button>
+        <button class="btn" style="width:100%" onclick="window.loginMode='email';render()">Logg inn med e-post</button>
       </div>
       ${statusMsg?`<p class="status" style="color:#c0392b;text-align:center">${statusMsg}</p>`:''}
     </div>`;
