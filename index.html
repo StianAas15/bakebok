@@ -511,8 +511,8 @@ async function initDrive() {
 }
 
 async function loadRecipes() {
-  const list=await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and mimeType='application/json' and not name='categories.json' and trashed=false&fields=files(id,name)`);
-  const all=await Promise.all((list.files||[]).map(async f=>{
+  const list=await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and mimeType='application/json' and trashed=false&fields=files(id,name)`);
+  const all=await Promise.all((list.files||[]).filter(f=>f.name!=='categories.json').map(async f=>{
     try {
       const r=await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,{headers:{Authorization:`Bearer ${token}`}});
       const data=await r.json();
