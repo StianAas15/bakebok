@@ -511,12 +511,16 @@ async function initDrive() {
 }
 
 async function loadRecipes() {
-  const list=await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and name contains 'recipe_' and trashed=false&fields=files(id,name)`);
+  const list=await driveReq(`https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and mimeType='application/json' and not name='categories.json' and trashed=false&fields=files(id,name)`);
   const all=await Promise.all((list.files||[]).map(async f=>{
-    const r=await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,{headers:{Authorization:`Bearer ${token}`}});
-    return r.json();
+    try {
+      const r=await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,{headers:{Authorization:`Bearer ${token}`}});
+      const data=await r.json();
+      if(data.versions) return data;
+      return null;
+    } catch(e){ return null; }
   }));
-  recipes=all.sort((a,b)=>new Date(b.versions[0].date)-new Date(a.versions[0].date));
+  recipes=all.filter(Boolean).sort((a,b)=>new Date(b.versions[0].date)-new Date(a.versions[0].date));
 }
 
 async function loadCoverImage() {
