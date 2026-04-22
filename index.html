@@ -51,6 +51,13 @@
   .cat-count { font-size: 11px; opacity: 0.6; margin-top: 2px; display: block; }
   .cat-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 0.5px solid #e0e0d8; }
   .cat-row:last-child { border-bottom: none; }
+  @media print {
+    .no-print { display: none !important; }
+    body { background: #fff; }
+    .app { padding: 0; }
+    .card { border: none; padding: 0; margin-bottom: 1rem; }
+    pre { font-size: 12px; }
+  }
 </style>
 </head>
 <body>
@@ -217,10 +224,11 @@ function recipeView() {
     `<button class="btn version-tab ${i===selectedVersion?'active':''}" onclick="selVer(${i})">v${r.versions.length-i} · ${fmt(ver.date)}</button>`).join('')}</div>`:'';
   const imgs = (v.images||[]).map(img=>`<img class="recipe-img" src="${img}" alt="">`).join('');
   return `
-    <div class="topbar"><button class="btn" onclick="backFromRecipe()">← Tilbake</button>
+    <div class="topbar no-print"><button class="btn" onclick="backFromRecipe()">← Tilbake</button>
     <div class="gap">
       <button class="btn" onclick="addVersion()">+ Versjon</button>
       <button class="btn" onclick="startEdit()">Rediger</button>
+      <button class="btn" onclick="window.print()">🖨 Skriv ut</button>
       <button class="btn-danger" onclick="confirmDelete()">Slett</button>
     </div></div>
     <p class="muted" style="margin-bottom:4px">${catName}</p>
