@@ -89,12 +89,12 @@ const functions = getFunctions(app, 'europe-west1');
 const googleProvider = new GoogleAuthProvider();
 
 const DEFAULT_CATEGORIES = [
-  { id: 'gjærbrød',  name: 'Brød på gjær',    icon: '🍞' },
-  { id: 'surdeig',   name: 'Brød på surdeig',  icon: '🫓' },
-  { id: 'søtbakst',  name: 'Søtbakst på gjær', icon: '🥐' },
-  { id: 'kjeks',     name: 'Kjeks og scones',   icon: '🍪' },
-  { id: 'kaker',     name: 'Kaker',             icon: '🎂' },
-  { id: 'andre',     name: 'Andre bakverk',     icon: '🧁' },
+  { id: 'gjærbrød',  name: 'Brød på gjær',    icon: '' },
+  { id: 'surdeig',   name: 'Brød på surdeig',  icon: '' },
+  { id: 'søtbakst',  name: 'Søtbakst på gjær', icon: '' },
+  { id: 'kjeks',     name: 'Kjeks og scones',   icon: '' },
+  { id: 'kaker',     name: 'Kaker',             icon: '' },
+  { id: 'andre',     name: 'Andre bakverk',     icon: '' },
 ];
 
 function allCategories() { return [...DEFAULT_CATEGORIES, ...customCategories]; }
