@@ -104,8 +104,8 @@ function fmt(iso) { return new Date(iso).toLocaleDateString('nb-NO',{day:'2-digi
 let currentUser = null;
 let recipes = [];
 let customCategories = [];
-let coverImageUrl = sessionStorage.getItem('bakebok_cover') || null;
-let anthropicKey = sessionStorage.getItem('bakebok_akey') || null;
+let coverImageUrl = null;
+let anthropicKey = null;
 let view = 'login';
 let selected = null;
 let selectedVersion = 0;
@@ -325,12 +325,12 @@ function bindEdit() {
 
 function bindSettings() {
   const ci=document.getElementById('cover-input');
-  if(ci) ci.addEventListener('change', async e=>{
+ if(ci) ci.addEventListener('change', async e=>{
     const file=e.target.files[0]; if(!file) return;
     setStatus('Laster opp forsidebilde...');
-    const url=await uploadFile(file,'cover/cover.jpg');
+    const url=await uploadFile(file,`cover/cover_${Date.now()}.jpg`);
     coverImageUrl=url;
-    sessionStorage.setItem('bakebok_cover',url);
+    await setDoc(doc(db,'settings','cover'),{url});
     setStatus('Forsidebilde lagret!');
     setTimeout(()=>{statusMsg='';render();},2000);
     render();
@@ -375,10 +375,12 @@ async function loadCustomCategories() {
   const snap=await getDocs(collection(db,'categories'));
   customCategories=snap.docs.map(d=>({id:d.id,...d.data()}));
 }
-async function loadApiKey() {
+async function loadAppSettings() {
   const snap=await getDocs(collection(db,'settings'));
-  const keyDoc=snap.docs.find(d=>d.id==='apikey');
-  if(keyDoc){anthropicKey=keyDoc.data().key;sessionStorage.setItem('bakebok_akey',anthropicKey);}
+  snap.docs.forEach(d=>{
+    if(d.id==='apikey') anthropicKey=d.data().key;
+    if(d.id==='cover') coverImageUrl=d.data().url;
+  });
 }
 async function saveRecipeToDb(recipe) {
   await setDoc(doc(db,'recipes',recipe.id),recipe);
@@ -391,7 +393,7 @@ async function deleteRecipeFromDb(id) {
 async function saveApiKey() {
   const k=document.getElementById('akey-input').value.trim();
   if(!k){setStatus('Lim inn en API-nøkkel først.');return;}
-  anthropicKey=k; sessionStorage.setItem('bakebok_akey',k);
+  anthropicKey=k;
   await setDoc(doc(db,'settings','apikey'),{key:k});
   setStatus('API-nøkkel lagret!');
   setTimeout(()=>{statusMsg='';render();},2000);
@@ -541,7 +543,7 @@ onAuthStateChanged(auth, async user => {
     }
     currentUser = user;
     loading = true; view = 'home'; render();
-    await Promise.all([loadRecipes(), loadCustomCategories(), loadApiKey()]);
+    await Promise.all([loadRecipes(), loadCustomCategories(), loadAppSettings()]);
     loading = false; render();
   } else {
     currentUser = null;
