@@ -1,6 +1,7 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { initializeApp } = require("firebase-admin/app");
 const { getAuth } = require("firebase-admin/auth");
+const { getFirestore } = require("firebase-admin/firestore");
 
 initializeApp();
 
@@ -20,8 +21,18 @@ exports.createUser = onCall({ region: "europe-west1" }, async (request) => {
     throw new HttpsError("invalid-argument", "Passordet må være minst 6 tegn.");
   }
 
+  const normalizedEmail = email.trim().toLowerCase();
+
   try {
-    const newUser = await getAuth().createUser({ email, password });
+    const newUser = await getAuth().createUser({ email: normalizedEmail, password });
+
+    // Legg e-posten i hvitlisten i Firestore
+    await getFirestore().collection("allowed_emails").doc(normalizedEmail).set({
+      email: normalizedEmail,
+      createdAt: new Date().toISOString(),
+      createdBy: request.auth.token.email || request.auth.uid,
+    });
+
     return { success: true, uid: newUser.uid, email: newUser.email };
   } catch (err) {
     if (err.code === "auth/email-already-exists") {
