@@ -1,3 +1,8 @@
+Bra. Her kommer koden – marker alt mellom de to strekene under, kopier (Ctrl+C), og lim inn i Notisblokk (Ctrl+V). Så lagrer du med Ctrl+S.
+
+---
+
+```html
 <!DOCTYPE html>
 <html lang="nb">
 <head>
@@ -68,6 +73,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebas
 import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js';
 import { getFirestore, collection, doc, setDoc, getDocs, deleteDoc, query, where } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js';
+import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-functions.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyC8cmkZQXfPBFPeFy4ShYqOdCHRqKmkIng",
@@ -83,6 +89,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
+const functions = getFunctions(app, 'europe-west1');
 const googleProvider = new GoogleAuthProvider();
 
 const DEFAULT_CATEGORIES = [
@@ -223,6 +230,15 @@ function settingsView() {
       </div>
     </div>
     <div class="card">
+      <p style="font-weight:500;margin-bottom:8px">Opprett ny bruker</p>
+      <p class="muted" style="margin-bottom:10px">Legg til en ny person som skal ha tilgang til appen.</p>
+      <label>E-postadresse</label>
+      <input type="email" id="new-user-email" placeholder="navn@epost.no">
+      <label>Midlertidig passord</label>
+      <input type="text" id="new-user-pass" placeholder="Minst 6 tegn">
+      <button class="btn-primary" style="margin-top:10px;width:100%" onclick="createNewUser()">Opprett bruker</button>
+    </div>
+    <div class="card">
       <p style="font-weight:500;margin-bottom:6px">Claude API-nøkkel</p>
       <p class="muted" style="margin-bottom:8px">Brukes til å lese oppskrifter fra bilder.</p>
       ${anthropicKey?`<p style="font-size:13px;color:#1D9E75;margin-bottom:8px">✅ API-nøkkel er lagret</p>`:`<p style="font-size:13px;color:#c0392b;margin-bottom:8px">❌ Ingen API-nøkkel</p>`}
@@ -335,10 +351,7 @@ async function doEmailLogin() {
   const pass=document.getElementById('l-pass')?.value;
   if(!email||!pass){statusMsg='Fyll inn e-post og passord.';render();return;}
   try { await signInWithEmailAndPassword(auth,email,pass); }
-  catch(e) {
-    try { await createUserWithEmailAndPassword(auth,email,pass); }
-    catch(e2) { statusMsg='Feil e-post eller passord.'; render(); }
-  }
+  catch(e) { statusMsg='Feil e-post eller passord.'; render(); }
 }
 async function doSignOut() { await signOut(auth); }
 
@@ -484,6 +497,23 @@ async function scanRecipe(file) {
   } catch(e){setStatus('Kunne ikke lese oppskriften. Prøv igjen.');}
 }
 
+// Opprett ny bruker
+async function createNewUser() {
+  const email = document.getElementById('new-user-email').value.trim();
+  const pass = document.getElementById('new-user-pass').value;
+  if (!email || !pass) { setStatus('Fyll inn både e-post og passord.'); return; }
+  if (pass.length < 6) { setStatus('Passordet må være minst 6 tegn.'); return; }
+  setStatus('Oppretter bruker...');
+  try {
+    const createUser = httpsCallable(functions, 'createUser');
+    const result = await createUser({ email, password: pass });
+    setStatus(`Bruker opprettet: ${result.data.email}`);
+    setTimeout(() => { statusMsg = ''; render(); }, 3000);
+  } catch (err) {
+    setStatus('Feil: ' + (err.message || 'Kunne ikke opprette bruker.'));
+  }
+}
+
 // Init
 onAuthStateChanged(auth, async user => {
   currentUser=user;
@@ -497,8 +527,13 @@ onAuthStateChanged(auth, async user => {
 });
 
 // Expose to window
-Object.assign(window,{doGoogleLogin,doEmailLogin,doSignOut,setView,goHome,openRecipe,selVer,setStatus,selectCat,backFromRecipe,startNew,startEdit,addVersion,handleSave,confirmDelete,addCustomCat,deleteCustomCat,saveApiKey,loginMode});
+Object.assign(window,{doGoogleLogin,doEmailLogin,doSignOut,setView,goHome,openRecipe,selVer,setStatus,selectCat,backFromRecipe,startNew,startEdit,addVersion,handleSave,confirmDelete,addCustomCat,deleteCustomCat,saveApiKey,createNewUser,loginMode});
 Object.defineProperty(window,'loginMode',{get:()=>loginMode,set:v=>loginMode=v});
 </script>
 </body>
 </html>
+```
+
+---
+
+Si fra når du har limt inn og lagret. Da går vi videre til å pushe til GitHub.
