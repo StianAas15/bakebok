@@ -2,14 +2,29 @@
   "name": "Bakebok",
   "short_name": "Bakebok",
   "start_url": "/bakebok/",
+  "scope": "/bakebok/",
   "display": "standalone",
   "background_color": "#f5f5f0",
   "theme_color": "#1D9E75",
+  "orientation": "portrait",
   "icons": [
     {
-      "src": "https://em-content.zobj.net/source/google/350/bread_1f35e.png",
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
