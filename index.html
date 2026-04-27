@@ -573,7 +573,25 @@ async function confirmDelete() {
 
 // Scan
 function toBase64(file){
-  return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
+  return new Promise((res,rej)=>{
+    const img=new Image();
+    img.onload=()=>{
+      const maxDim=1600;
+      let w=img.width, h=img.height;
+      if(w>maxDim||h>maxDim){
+        if(w>h){h=Math.round(h*maxDim/w);w=maxDim;}
+        else{w=Math.round(w*maxDim/h);h=maxDim;}
+      }
+      const canvas=document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      const ctx=canvas.getContext('2d');
+      ctx.drawImage(img,0,0,w,h);
+      const dataUrl=canvas.toDataURL('image/jpeg',0.85);
+      res(dataUrl.split(',')[1]);
+    };
+    img.onerror=rej;
+    img.src=URL.createObjectURL(file);
+  });
 }
 async function scanRecipe(file) {
   if(!file) return;
