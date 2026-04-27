@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="nb">
 <head>
@@ -51,6 +52,14 @@
   .cat-row:last-child { border-bottom: none; }
   .login-wrap { max-width: 400px; margin: 4rem auto; padding: 0 1rem; width: 100%; }
   #root { width: 100%; }
+  .ing-row { display: grid; grid-template-columns: 70px 70px 1fr 30px; gap: 6px; margin-bottom: 6px; align-items: start; }
+  .ing-row input { padding: 6px 8px; font-size: 13px; }
+  .ing-row .ing-remove { border: none; background: transparent; color: #c0392b; cursor: pointer; font-size: 18px; padding: 6px 0; line-height: 1; }
+  .ing-merknad { grid-column: 1 / -1; margin-bottom: 10px; }
+  .ing-merknad input { padding: 5px 8px; font-size: 12px; color: #666; font-style: italic; }
+  .ing-list-item { padding: 6px 0; font-size: 14px; line-height: 1.5; border-bottom: 0.5px solid #f0f0e8; }
+  .ing-list-item:last-child { border-bottom: none; }
+  .ing-list-item .ing-merknad-text { color: #888; font-size: 12px; font-style: italic; margin-left: 6px; }
   @media print {
     .no-print { display: none !important; }
     body { background: #fff; }
@@ -100,6 +109,15 @@ const DEFAULT_CATEGORIES = [
 function allCategories() { return [...DEFAULT_CATEGORIES, ...customCategories]; }
 function getCatName(id) { return allCategories().find(c=>c.id===id)?.name || id; }
 function fmt(iso) { return new Date(iso).toLocaleDateString('nb-NO',{day:'2-digit',month:'short',year:'numeric'}); }
+
+// Format en ingrediens for visning: "500 g hvetemel" eller "Salt"
+function formatIngredient(ing) {
+  const parts = [];
+  if (ing.mengde !== null && ing.mengde !== undefined && ing.mengde !== '') parts.push(ing.mengde);
+  if (ing.enhet) parts.push(ing.enhet);
+  if (ing.navn) parts.push(ing.navn);
+  return parts.join(' ');
+}
 
 let currentUser = null;
 let recipes = [];
@@ -160,7 +178,6 @@ function homeView() {
   const catGrid = allCategories().map(c => {
     const count = recipes.filter(r=>r.category===c.id).length;
     return `<button class="cat-btn ${activeCategory===c.id?'active':''}" onclick="selectCat('${c.id}')">
-      <span class="cat-icon">${c.icon}</span>
       <span class="cat-name">${c.name}</span>
       <span class="cat-count">${count} oppskrift${count!==1?'er':''}</span>
     </button>`;
@@ -200,7 +217,7 @@ function settingsView() {
     ? `<p class="muted" style="margin-bottom:12px">Ingen egne kategorier ennå.</p>`
     : customCategories.map(c=>`
         <div class="cat-row">
-          <span style="font-size:14px">${c.icon} ${c.name}</span>
+          <span style="font-size:14px">${c.name}</span>
           <button class="btn-danger" style="padding:4px 10px;font-size:12px" onclick="deleteCustomCat('${c.id}')">Slett</button>
         </div>`).join('');
   return `
@@ -220,7 +237,6 @@ function settingsView() {
       <p style="font-weight:500;margin-bottom:12px">Egne kategorier</p>
       ${customList}
       <div style="display:flex;gap:8px;margin-top:12px">
-        <input type="text" id="new-cat-icon" placeholder="🫙" style="width:60px;flex-shrink:0">
         <input type="text" id="new-cat-name" placeholder="F.eks. Marmelade">
         <button class="btn-primary" style="white-space:nowrap" onclick="addCustomCat()">+ Legg til</button>
       </div>
@@ -250,8 +266,18 @@ function recipeView() {
   const v = r.versions[selectedVersion];
   const catName = getCatName(r.category);
   const tabs = r.versions.length>1?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${r.versions.map((ver,i)=>
-    `<button class="btn ${i===selectedVersion?'':'.'}" style="font-size:12px;${i===selectedVersion?'background:#f0f0e8':''}" onclick="selVer(${i})">v${r.versions.length-i} · ${fmt(ver.date)}</button>`).join('')}</div>`:'';
+    `<button class="btn" style="font-size:12px;${i===selectedVersion?'background:#f0f0e8':''}" onclick="selVer(${i})">v${r.versions.length-i} · ${fmt(ver.date)}</button>`).join('')}</div>`:'';
   const imgs=(v.images||[]).map(img=>`<img class="recipe-img" src="${img}" alt="">`).join('');
+
+  const ingList = (v.ingredientsList || []);
+  const ingHtml = ingList.length === 0
+    ? `<p class="muted">Ingen ingredienser registrert.</p>`
+    : ingList.map(ing => {
+        const main = formatIngredient(ing);
+        const merknad = ing.merknad ? `<span class="ing-merknad-text">(${ing.merknad})</span>` : '';
+        return `<div class="ing-list-item">${main}${merknad}</div>`;
+      }).join('');
+
   return `
     <div class="topbar no-print"><button class="btn" onclick="backFromRecipe()">← Tilbake</button>
     <div class="gap">
@@ -263,14 +289,31 @@ function recipeView() {
     <h2 style="margin-bottom:12px">${r.name}</h2>
     ${tabs}${imgs}
     ${v.notes?`<div class="info-box">${v.notes}</div>`:''}
-    <div class="card"><p style="font-weight:500;margin-bottom:8px">Ingredienser</p><pre>${v.ingredients}</pre></div>
-    <div class="card"><p style="font-weight:500;margin-bottom:8px">Fremgangsmåte</p><pre>${v.steps}</pre></div>`;
+    <div class="card"><p style="font-weight:500;margin-bottom:8px">Ingredienser</p>${ingHtml}</div>
+    <div class="card"><p style="font-weight:500;margin-bottom:8px">Fremgangsmåte</p><pre>${v.steps || ''}</pre></div>`;
+}
+
+function ingredientRowHtml(ing, idx) {
+  return `
+    <div class="ing-row" data-idx="${idx}">
+      <input type="text" class="ing-mengde" placeholder="Mengde" value="${ing.mengde !== null && ing.mengde !== undefined ? ing.mengde : ''}">
+      <input type="text" class="ing-enhet" placeholder="Enhet" value="${ing.enhet || ''}">
+      <input type="text" class="ing-navn" placeholder="Ingrediens" value="${ing.navn || ''}">
+      <button type="button" class="ing-remove" onclick="removeIngredient(${idx})" title="Fjern">×</button>
+    </div>
+    <div class="ing-merknad">
+      <input type="text" class="ing-merknad-input" placeholder="Merknad (f.eks. romtemperert, etter smak)" value="${ing.merknad || ''}">
+    </div>`;
 }
 
 function editView() {
   const v = editData.versions[0];
   const imgs=(v.images||[]).map(img=>`<img class="recipe-img" src="${img}" alt="">`).join('');
-  const catOptions=allCategories().map(c=>`<option value="${c.id}" ${editData.category===c.id?'selected':''}>${c.icon} ${c.name}</option>`).join('');
+  const catOptions=allCategories().map(c=>`<option value="${c.id}" ${editData.category===c.id?'selected':''}>${c.name}</option>`).join('');
+
+  const ingList = v.ingredientsList || [];
+  const ingRowsHtml = ingList.map((ing, i) => ingredientRowHtml(ing, i)).join('');
+
   return `
     <div class="topbar"><button class="btn" onclick="setView('home')">← Avbryt</button></div>
     <h2>${editData.name||'Ny oppskrift'}</h2>
@@ -291,9 +334,12 @@ function editView() {
     </div>
     <div class="card">
       <p class="muted" style="margin-bottom:8px">Versjon – ${fmt(v.date)}</p>
-      <label>Ingredienser</label><textarea id="e-ing" rows="5">${v.ingredients}</textarea>
-      <label>Fremgangsmåte</label><textarea id="e-steps" rows="6">${v.steps}</textarea>
-      <label>Notater / justeringer</label><textarea id="e-notes" rows="3">${v.notes}</textarea>
+      <p style="font-weight:500;margin-bottom:8px">Ingredienser</p>
+      <div id="ing-container">${ingRowsHtml}</div>
+      <button type="button" class="btn" style="margin-top:8px" onclick="addIngredient()">+ Legg til ingrediens</button>
+
+      <label>Fremgangsmåte</label><textarea id="e-steps" rows="6">${v.steps || ''}</textarea>
+      <label>Notater / justeringer</label><textarea id="e-notes" rows="3">${v.notes || ''}</textarea>
     </div>
     <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Bilder av resultatet</p>
@@ -325,7 +371,7 @@ function bindEdit() {
 
 function bindSettings() {
   const ci=document.getElementById('cover-input');
- if(ci) ci.addEventListener('change', async e=>{
+  if(ci) ci.addEventListener('change', async e=>{
     const file=e.target.files[0]; if(!file) return;
     setStatus('Laster opp forsidebilde...');
     const url=await uploadFile(file,`cover/cover_${Date.now()}.jpg`);
@@ -400,10 +446,9 @@ async function saveApiKey() {
 }
 async function addCustomCat() {
   const name=document.getElementById('new-cat-name').value.trim();
-  const icon=document.getElementById('new-cat-icon').value.trim()||'🫙';
   if(!name){setStatus('Skriv inn et kategorinavn.');return;}
   const id='custom_'+name.toLowerCase().replace(/\s+/g,'_')+'_'+Date.now();
-  const cat={id,name,icon};
+  const cat={id,name,icon:''};
   await setDoc(doc(db,'categories',id),cat);
   customCategories.push(cat);
   setStatus('Kategori lagt til!');
@@ -441,35 +486,80 @@ function setStatus(s){statusMsg=s;render();}
 function selectCat(id){activeCategory=id;render();}
 function backFromRecipe(){view='home';render();}
 
+function emptyIngredient() {
+  return { mengde: '', enhet: '', navn: '', merknad: '' };
+}
+
 function startNew() {
-  editData={id:`recipe_${Date.now()}`,name:'',category:'',versions:[{date:new Date().toISOString(),notes:'',ingredients:'',steps:'',images:[]}]};
+  editData={
+    id:`recipe_${Date.now()}`,
+    name:'',
+    category:'',
+    versions:[{
+      date:new Date().toISOString(),
+      notes:'',
+      ingredientsList:[ emptyIngredient() ],
+      steps:'',
+      images:[]
+    }]
+  };
   view='edit';render();
 }
 function startEdit() {
   editData=JSON.parse(JSON.stringify(recipes.find(r=>r.id===selected)));
+  if (!editData.versions[0].ingredientsList) {
+    editData.versions[0].ingredientsList = [ emptyIngredient() ];
+  }
   view='edit';render();
 }
-function addVersion() {
-  const r=recipes.find(x=>x.id===selected);
-  editData=JSON.parse(JSON.stringify(r));
-  editData.versions.unshift({date:new Date().toISOString(),notes:'',ingredients:editData.versions[0].ingredients,steps:editData.versions[0].steps,images:[]});
-  view='edit';render();
+function addIngredient() {
+  saveFormState();
+  editData.versions[0].ingredientsList.push(emptyIngredient());
+  render();
+}
+function removeIngredient(idx) {
+  saveFormState();
+  editData.versions[0].ingredientsList.splice(idx, 1);
+  if (editData.versions[0].ingredientsList.length === 0) {
+    editData.versions[0].ingredientsList.push(emptyIngredient());
+  }
+  render();
 }
 function saveFormState() {
   const n=document.getElementById('e-name');
   const c=document.getElementById('e-cat');
-  const i=document.getElementById('e-ing');
   const s=document.getElementById('e-steps');
   const nt=document.getElementById('e-notes');
   if(n)editData.name=n.value;
   if(c)editData.category=c.value;
-  if(i)editData.versions[0].ingredients=i.value;
   if(s)editData.versions[0].steps=s.value;
   if(nt)editData.versions[0].notes=nt.value;
+
+  const container = document.getElementById('ing-container');
+  if (container) {
+    const rows = container.querySelectorAll('.ing-row');
+    const merknader = container.querySelectorAll('.ing-merknad-input');
+    const newList = [];
+    rows.forEach((row, i) => {
+      const mengdeStr = row.querySelector('.ing-mengde').value.trim();
+      const enhet = row.querySelector('.ing-enhet').value.trim();
+      const navn = row.querySelector('.ing-navn').value.trim();
+      const merknad = merknader[i] ? merknader[i].value.trim() : '';
+      let mengde = null;
+      if (mengdeStr !== '') {
+        const num = parseFloat(mengdeStr.replace(',', '.'));
+        mengde = isNaN(num) ? mengdeStr : num;
+      }
+      newList.push({ mengde, enhet, navn, merknad });
+    });
+    editData.versions[0].ingredientsList = newList;
+  }
 }
 async function handleSave() {
   saveFormState();
   if(!editData.name.trim()){setStatus('Gi oppskriften et navn.');return;}
+  editData.versions[0].ingredientsList = editData.versions[0].ingredientsList
+    .filter(ing => ing.navn || ing.mengde || ing.enhet || ing.merknad);
   loading=true;setStatus('Lagrer...');
   await saveRecipeToDb(editData);
   loading=false;view='home';editData=null;render();
@@ -490,23 +580,70 @@ async function scanRecipe(file) {
   if(!anthropicKey){setStatus('Legg inn Claude API-nøkkel i innstillinger først.');return;}
   saveFormState();setStatus('Leser oppskrift fra bilde...');
   const b64=await toBase64(file);
+
+  const promptText = `Dette er et bilde av en oppskrift. Returner KUN gyldig JSON i nøyaktig dette formatet:
+
+{
+  "name": "Navn på oppskriften",
+  "ingredientsList": [
+    { "mengde": 500, "enhet": "g", "navn": "hvetemel", "merknad": "" },
+    { "mengde": null, "enhet": "", "navn": "salt", "merknad": "etter smak" }
+  ],
+  "steps": "Hele fremgangsmåten som tekst",
+  "notes": "Eventuelle ekstra notater fra oppskriften"
+}
+
+Regler for ingrediensene:
+- Hver ingrediens skal være ett objekt med fire felt: mengde (tall eller null), enhet (string), navn (string), merknad (string).
+- Bruk null for mengde hvis oppskriften ikke spesifiserer en mengde (f.eks. "salt etter smak").
+- Bruk tom streng "" for enhet, navn eller merknad hvis ikke aktuelt.
+- Vanlige enheter: g, kg, ml, dl, l, ts, ss, stk, pakke, knivsodd.
+- Hvis det står beskrivelser som "romtemperert", "finhakket", "knust" osv., legg dem i merknad.
+- Hvis mengden mangler men det står en kommentar (f.eks. "etter smak", "litt"), legg kommentaren i merknad og sett mengde=null.
+
+Svar KUN med JSON, ingen annen tekst.`;
+
   try {
     const res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'x-api-key':anthropicKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:1024,messages:[{role:'user',content:[
-        {type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:b64}},
-        {type:'text',text:'Dette er et bilde av en oppskrift. Returner KUN gyldig JSON: {"name":"","ingredients":"","steps":"","notes":""}'}
-      ]}]})
+      body:JSON.stringify({
+        model:'claude-haiku-4-5-20251001',
+        max_tokens:2048,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:b64}},
+          {type:'text',text:promptText}
+        ]}]
+      })
     });
     const data=await res.json();
-    const parsed=JSON.parse(data.content?.[0]?.text.replace(/```json|```/g,'').trim()||'{}');
-    if(parsed.name){editData.name=parsed.name;document.getElementById('e-name').value=parsed.name;}
-    if(parsed.ingredients){editData.versions[0].ingredients=parsed.ingredients;document.getElementById('e-ing').value=parsed.ingredients;}
-    if(parsed.steps){editData.versions[0].steps=parsed.steps;document.getElementById('e-steps').value=parsed.steps;}
-    if(parsed.notes){editData.versions[0].notes=parsed.notes;document.getElementById('e-notes').value=parsed.notes;}
+    const rawText = data.content?.[0]?.text || '{}';
+    const cleaned = rawText.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(cleaned);
+
+    if (parsed.name) {
+      editData.name = parsed.name;
+    }
+    if (Array.isArray(parsed.ingredientsList)) {
+      editData.versions[0].ingredientsList = parsed.ingredientsList.map(ing => ({
+        mengde: (ing.mengde === null || ing.mengde === undefined) ? null : ing.mengde,
+        enhet: ing.enhet || '',
+        navn: ing.navn || '',
+        merknad: ing.merknad || ''
+      }));
+    }
+    if (parsed.steps) {
+      editData.versions[0].steps = parsed.steps;
+    }
+    if (parsed.notes) {
+      editData.versions[0].notes = parsed.notes;
+    }
     setStatus('Oppskrift lest! Sjekk og juster feltene.');
-  } catch(e){setStatus('Kunne ikke lese oppskriften. Prøv igjen.');}
+    render();
+  } catch(e) {
+    console.error('Scan-feil:', e);
+    setStatus('Kunne ikke lese oppskriften. Prøv igjen.');
+  }
 }
 
 // Opprett ny bruker
@@ -526,10 +663,9 @@ async function createNewUser() {
   }
 }
 
-// Init – sjekker hvitliste ved hver innlogging
+// Init
 onAuthStateChanged(auth, async user => {
   if (user) {
-    // Sjekk om e-posten er på hvitlisten
     const allowed = await isEmailAllowed(user.email);
     if (!allowed) {
       await signOut(auth);
@@ -554,7 +690,7 @@ onAuthStateChanged(auth, async user => {
 });
 
 // Expose to window
-Object.assign(window,{doGoogleLogin,doEmailLogin,doSignOut,setView,goHome,openRecipe,selVer,setStatus,selectCat,backFromRecipe,startNew,startEdit,addVersion,handleSave,confirmDelete,addCustomCat,deleteCustomCat,saveApiKey,createNewUser,loginMode});
+Object.assign(window,{doGoogleLogin,doEmailLogin,doSignOut,setView,goHome,openRecipe,selVer,setStatus,selectCat,backFromRecipe,startNew,startEdit,handleSave,confirmDelete,addCustomCat,deleteCustomCat,saveApiKey,createNewUser,addIngredient,removeIngredient,loginMode});
 Object.defineProperty(window,'loginMode',{get:()=>loginMode,set:v=>loginMode=v});
 </script>
 </body>
