@@ -629,7 +629,7 @@ Svar KUN med JSON, ingen annen tekst.`;
         model:'claude-haiku-4-5-20251001',
         max_tokens:2048,
         messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:file.type||'image/jpeg',data:b64}},
+          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
           {type:'text',text:promptText}
         ]}]
       })
