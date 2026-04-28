@@ -67,9 +67,8 @@
   .role-list-header { display: grid; grid-template-columns: 1fr 130px 30px; gap: 6px; font-size: 12px; color: #666; padding: 4px 0; border-bottom: 0.5px solid #e0e0d8; margin-bottom: 8px; }
   .role-search { margin-bottom: 12px; }
   .role-list { max-height: 400px; overflow-y: auto; padding-right: 4px; }
-  .input-error { border-color: #c0392b !important; background: #fef5f4; }
-  .validation-msg { color: #c0392b; font-size: 13px; margin: 8px 0; padding: 8px 12px; background: #fef5f4; border-radius: 8px; }
- .bakepct-summary { font-size: 13px; color: #555; padding: 8px 12px; background: #f0f0e8; border-radius: 8px; margin-bottom: 12px; }
+  .input-error { border-color: #c0392b !important; background: #fef5f4 !important; }
+  .bakepct-summary { font-size: 13px; color: #555; padding: 8px 12px; background: #f0f0e8; border-radius: 8px; margin-bottom: 12px; }
   .bakepct-summary .pct-label { color: #888; }
   .bakepct-summary .pct-val { font-weight: 600; color: #1a1a1a; margin-right: 12px; }
   @media print {
@@ -118,7 +117,6 @@ const DEFAULT_CATEGORIES = [
   { id: 'andre',     name: 'Andre bakverk',     icon: '' },
 ];
 
-// Kategorier som skal vise bakeprosent
 const BAKE_PCT_CATEGORIES = ['gjærbrød', 'surdeig', 'søtbakst'];
 
 const ROLE_OPTIONS = [
@@ -160,10 +158,6 @@ function lookupRole(navn) {
   return '';
 }
 
-// =====================================================================
-// BAKEPROSENT-BEREGNING
-// =====================================================================
-
 function asNumber(x) {
   if (x === null || x === undefined || x === '') return 0;
   if (typeof x === 'number') return x;
@@ -171,20 +165,16 @@ function asNumber(x) {
   return isNaN(n) ? 0 : n;
 }
 
-// Returnerer { melTotal, melSiktet, melSammalt, vaeskeTotal, salt, hydrering, saltPct, grovhet }
 function calcBakePcts(ingList) {
   if (!Array.isArray(ingList)) return null;
-
   let melSiktet = 0;
   let melSammalt = 0;
   let vaeskeTotal = 0;
   let salt = 0;
 
-  // forfermenter deles 50/50 mel/væske som standard
   for (const ing of ingList) {
     const mengde = asNumber(ing.mengde);
     if (mengde === 0) continue;
-
     switch (ing.rolle) {
       case 'mel_siktet':   melSiktet += mengde; break;
       case 'mel_sammalt':  melSammalt += mengde; break;
@@ -200,15 +190,12 @@ function calcBakePcts(ingList) {
 
   const melTotal = melSiktet + melSammalt;
   if (melTotal === 0) return null;
-
   const hydrering = (vaeskeTotal / melTotal) * 100;
   const saltPct = (salt / melTotal) * 100;
   const grovhet = (melSammalt / melTotal) * 100;
-
   return { melTotal, melSiktet, melSammalt, vaeskeTotal, salt, hydrering, saltPct, grovhet };
 }
 
-// Beregn prosent for én ingrediens (av mel total)
 function ingredientPct(ing, melTotal) {
   if (melTotal === 0) return null;
   const mengde = asNumber(ing.mengde);
@@ -216,7 +203,6 @@ function ingredientPct(ing, melTotal) {
   return (mengde / melTotal) * 100;
 }
 
-// Skal denne kategorien vise bakeprosent?
 function shouldShowBakePct(categoryId) {
   return BAKE_PCT_CATEGORIES.includes(categoryId);
 }
@@ -240,10 +226,6 @@ function bakePctSummaryHtml(pcts) {
   </div>`;
 }
 
-// =====================================================================
-// STATE
-// =====================================================================
-
 let currentUser = null;
 let recipes = [];
 let customCategories = [];
@@ -260,7 +242,7 @@ let activeCategory = null;
 let loginMode = 'choose';
 let roleSearch = '';
 let validationErrors = {};
- 
+
 function render() {
   const root = document.getElementById('root');
   if (view === 'login') { root.innerHTML = loginView(); bindLogin(); return; }
@@ -379,9 +361,9 @@ function settingsView() {
       <p style="font-weight:500;margin-bottom:8px">Opprett ny bruker</p>
       <p class="muted" style="margin-bottom:10px">Legg til en ny person som skal ha tilgang til appen.</p>
       <label>E-postadresse</label>
-      <input type="email" id="new-user-email" placeholder="navn@epost.no">
+      <input type="email" id="new-user-email" class="${validationErrors.userEmail?'input-error':''}" placeholder="navn@epost.no">
       <label>Midlertidig passord</label>
-      <input type="text" id="new-user-pass" placeholder="Minst 6 tegn">
+      <input type="text" id="new-user-pass" class="${validationErrors.userPass?'input-error':''}" placeholder="Minst 6 tegn">
       <button class="btn-primary" style="margin-top:10px;width:100%" onclick="createNewUser()">Opprett bruker</button>
     </div>
     <div class="card">
@@ -572,22 +554,17 @@ function bindEdit() {
   document.getElementById('scan-input').addEventListener('change', e=>scanRecipe(e.target.files[0]));
   document.getElementById('scan-cam').addEventListener('change', e=>scanRecipe(e.target.files[0]));
 
-  // Live oppdatering av bakeprosent ved endringer
   const container = document.getElementById('ing-container');
   if (container) {
     container.addEventListener('input', (e) => {
       const cls = e.target.classList;
-      if (cls && (cls.contains('ing-mengde') || cls.contains('ing-enhet') || cls.contains('ing-navn'))) {
-        // Re-render ved endring av mengde/navn (for prosent + auto-rolle)
-        if (cls.contains('ing-mengde')) {
-          saveFormState();
-          render();
-        }
+      if (cls && cls.contains('ing-mengde')) {
+        saveFormState();
+        render();
       }
     });
 
     container.addEventListener('change', (e) => {
-      // Endring av rolle eller kategori-select utløser re-render
       if (e.target.tagName === 'SELECT' && e.target.classList.contains('ing-rolle')) {
         saveFormState();
         render();
@@ -610,29 +587,25 @@ function bindEdit() {
     }, true);
   }
 
-  // Endring av kategori re-rendrer for å vise/skjule bakeprosent
   const catSelect = document.getElementById('e-cat');
   if (catSelect) {
     catSelect.addEventListener('change', () => {
+      validationErrors.category = false;
       saveFormState();
       render();
     });
   }
 
-// Fjern feilmarkering når brukeren begynner å fylle ut
   const nameEl = document.getElementById('e-name');
   if (nameEl) {
     nameEl.addEventListener('input', () => {
-      nameEl.classList.remove('input-error');
-      validationErrors.name = false;
+      if (validationErrors.name) {
+        validationErrors.name = false;
+        nameEl.classList.remove('input-error');
+      }
     });
   }
-  if (catSelect) {
-    catSelect.addEventListener('change', () => {
-      catSelect.classList.remove('input-error');
-      validationErrors.category = false;
-    });
-  }
+}
 
 function bindSettings() {
   const ci=document.getElementById('cover-input');
@@ -646,6 +619,25 @@ function bindSettings() {
     setTimeout(()=>{statusMsg='';render();},2000);
     render();
   });
+
+  const emailEl = document.getElementById('new-user-email');
+  if (emailEl) {
+    emailEl.addEventListener('input', () => {
+      if (validationErrors.userEmail) {
+        validationErrors.userEmail = false;
+        emailEl.classList.remove('input-error');
+      }
+    });
+  }
+  const passEl = document.getElementById('new-user-pass');
+  if (passEl) {
+    passEl.addEventListener('input', () => {
+      if (validationErrors.userPass) {
+        validationErrors.userPass = false;
+        passEl.classList.remove('input-error');
+      }
+    });
+  }
 }
 
 function bindRoles() {
@@ -664,7 +656,6 @@ function bindRoles() {
   }
 }
 
-// Hvitliste-sjekk
 async function isEmailAllowed(email) {
   if (!email) return false;
   const normalized = email.trim().toLowerCase();
@@ -678,7 +669,6 @@ async function isEmailAllowed(email) {
   }
 }
 
-// Auth
 async function doGoogleLogin() {
   try { await signInWithPopup(auth, googleProvider); }
   catch(e) { statusMsg='Innlogging feilet. Prøv igjen.'; render(); }
@@ -692,7 +682,6 @@ async function doEmailLogin() {
 }
 async function doSignOut() { await signOut(auth); }
 
-// Firestore
 async function loadRecipes() {
   const snap=await getDocs(collection(db,'recipes'));
   recipes=snap.docs.map(d=>({id:d.id,...d.data()}))
@@ -753,7 +742,6 @@ async function deleteCustomCat(id) {
   render();
 }
 
-// Ingrediensliste-admin
 function ingredientRoleId(navn) {
   return navn.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9æøå_]/g, '');
 }
@@ -807,7 +795,6 @@ async function saveAllRoleEdits() {
   setTimeout(() => { statusMsg = ''; render(); }, 2500);
 }
 
-// Storage
 async function uploadFile(file, path) {
   const storageRef=ref(storage,path);
   await uploadBytes(storageRef,file);
@@ -822,8 +809,7 @@ async function handleImageFile(file) {
   setStatus(''); render();
 }
 
-// Actions
-function setView(v){view=v;statusMsg='';if(v==='roles')roleSearch='';render();}
+function setView(v){view=v;statusMsg='';if(v==='roles')roleSearch='';validationErrors={};render();}
 function goHome(){activeCategory=null;view='home';render();}
 function openRecipe(id){selected=id;selectedVersion=0;view='recipe';render();}
 function selVer(i){selectedVersion=i;render();}
@@ -836,6 +822,7 @@ function emptyIngredient() {
 }
 
 function startNew() {
+  validationErrors = {};
   editData={
     id:`recipe_${Date.now()}`,
     name:'',
@@ -851,6 +838,7 @@ function startNew() {
   view='edit';render();
 }
 function startEdit() {
+  validationErrors = {};
   editData=JSON.parse(JSON.stringify(recipes.find(r=>r.id===selected)));
   if (!editData.versions[0].ingredientsList) {
     editData.versions[0].ingredientsList = [ emptyIngredient() ];
@@ -906,15 +894,14 @@ function saveFormState() {
 async function handleSave() {
   saveFormState();
 
-  // Valider
-  const missing = [];
   validationErrors = {};
-  if (!editData.name.trim()) { missing.push('navn'); validationErrors.name = true; }
-  if (!editData.category) { missing.push('kategori'); validationErrors.category = true; }
+  const missing = [];
+  if (!editData.name.trim()) { missing.push('Navn'); validationErrors.name = true; }
+  if (!editData.category) { missing.push('Kategori'); validationErrors.category = true; }
 
   if (missing.length > 0) {
-    const labels = missing.map(m => m === 'navn' ? 'Navn' : 'Kategori').join(' og ');
-    setStatus(`${labels} må fylles inn før oppskriften kan lagres.`);
+    setStatus(`${missing.join(' og ')} må fylles inn før oppskriften kan lagres.`);
+    render();
     return;
   }
 
@@ -924,13 +911,6 @@ async function handleSave() {
   await saveRecipeToDb(editData);
   loading=false;view='home';editData=null;validationErrors={};render();
 }
-
-  editData.versions[0].ingredientsList = editData.versions[0].ingredientsList
-    .filter(ing => ing.navn || ing.mengde || ing.enhet || ing.merknad);
-  loading=true;setStatus('Lagrer...');
-  await saveRecipeToDb(editData);
-  loading=false;view='home';editData=null;render();
-}
 async function confirmDelete() {
   const r=recipes.find(x=>x.id===selected);
   if(!r||!confirm(`Vil du slette "${r.name}"?`)) return;
@@ -938,7 +918,6 @@ async function confirmDelete() {
   view='home';render();
 }
 
-// Scan
 function toBase64(file){
   return new Promise((res,rej)=>{
     const img=new Image();
@@ -1035,42 +1014,42 @@ Svar KUN med JSON, ingen annen tekst.`;
   }
 }
 
-// Opprett ny bruker
 async function createNewUser() {
   const emailEl = document.getElementById('new-user-email');
   const passEl = document.getElementById('new-user-pass');
   const email = emailEl.value.trim();
   const pass = passEl.value;
 
-  // Valider
-  emailEl.classList.remove('input-error');
-  passEl.classList.remove('input-error');
+  validationErrors.userEmail = false;
+  validationErrors.userPass = false;
   const missing = [];
-  if (!email) { missing.push('e-post'); emailEl.classList.add('input-error'); }
-  if (!pass) { missing.push('passord'); passEl.classList.add('input-error'); }
+  if (!email) { missing.push('e-post'); validationErrors.userEmail = true; }
+  if (!pass) { missing.push('passord'); validationErrors.userPass = true; }
 
   if (missing.length > 0) {
     setStatus(`Fyll inn ${missing.join(' og ')}.`);
+    render();
     return;
   }
   if (pass.length < 6) {
-    passEl.classList.add('input-error');
+    validationErrors.userPass = true;
     setStatus('Passordet må være minst 6 tegn.');
+    render();
     return;
   }
 
-    setStatus('Oppretter bruker...');
+  setStatus('Oppretter bruker...');
   try {
     const createUser = httpsCallable(functions, 'createUser');
     const result = await createUser({ email, password: pass });
     setStatus(`Bruker opprettet: ${result.data.email}`);
+    validationErrors = {};
     setTimeout(() => { statusMsg = ''; render(); }, 3000);
   } catch (err) {
     setStatus('Feil: ' + (err.message || 'Kunne ikke opprette bruker.'));
   }
 }
 
-// Init
 onAuthStateChanged(auth, async user => {
   if (user) {
     const allowed = await isEmailAllowed(user.email);
@@ -1096,7 +1075,6 @@ onAuthStateChanged(auth, async user => {
   }
 });
 
-// Expose to window
 Object.assign(window,{doGoogleLogin,doEmailLogin,doSignOut,setView,goHome,openRecipe,selVer,setStatus,selectCat,backFromRecipe,startNew,startEdit,handleSave,confirmDelete,addCustomCat,deleteCustomCat,saveApiKey,createNewUser,addIngredient,removeIngredient,addIngredientRole,deleteIngredientRole,saveAllRoleEdits,loginMode});
 Object.defineProperty(window,'loginMode',{get:()=>loginMode,set:v=>loginMode=v});
 </script>
