@@ -259,7 +259,8 @@ let statusMsg = '';
 let activeCategory = null;
 let loginMode = 'choose';
 let roleSearch = '';
-
+let validationErrors = {};
+ 
 function render() {
   const root = document.getElementById('root');
   if (view === 'login') { root.innerHTML = loginView(); bindLogin(); return; }
@@ -530,9 +531,9 @@ function editView() {
       </div>
     </div>
     <div class="card">
-      <label>Navn</label><input id="e-name" value="${editData.name}" placeholder="F.eks. Surdeigsbaguetter">
+      <label>Navn</label><input id="e-name" class="${validationErrors.name?'input-error':''}" value="${editData.name}" placeholder="F.eks. Surdeigsbaguetter">
       <label>Kategori</label>
-      <select id="e-cat"><option value="">Velg kategori...</option>${catOptions}</select>
+      <select id="e-cat" class="${validationErrors.category?'input-error':''}"><option value="">Velg kategori...</option>${catOptions}</select>
     </div>
     <div class="card">
       <p class="muted" style="margin-bottom:8px">Versjon – ${fmt(v.date)}</p>
@@ -618,15 +619,20 @@ function bindEdit() {
     });
   }
 
- // Fjern feilmarkering når brukeren begynner å fylle ut
+// Fjern feilmarkering når brukeren begynner å fylle ut
   const nameEl = document.getElementById('e-name');
   if (nameEl) {
-    nameEl.addEventListener('input', () => nameEl.classList.remove('input-error'));
+    nameEl.addEventListener('input', () => {
+      nameEl.classList.remove('input-error');
+      validationErrors.name = false;
+    });
   }
   if (catSelect) {
-    catSelect.addEventListener('change', () => catSelect.classList.remove('input-error'));
+    catSelect.addEventListener('change', () => {
+      catSelect.classList.remove('input-error');
+      validationErrors.category = false;
+    });
   }
-}
 
 function bindSettings() {
   const ci=document.getElementById('cover-input');
@@ -902,23 +908,22 @@ async function handleSave() {
 
   // Valider
   const missing = [];
-  if (!editData.name.trim()) missing.push('navn');
-  if (!editData.category) missing.push('kategori');
+  validationErrors = {};
+  if (!editData.name.trim()) { missing.push('navn'); validationErrors.name = true; }
+  if (!editData.category) { missing.push('kategori'); validationErrors.category = true; }
 
   if (missing.length > 0) {
-    // Marker felter med rød ramme
-    if (missing.includes('navn')) {
-      const nEl = document.getElementById('e-name');
-      if (nEl) nEl.classList.add('input-error');
-    }
-    if (missing.includes('kategori')) {
-      const cEl = document.getElementById('e-cat');
-      if (cEl) cEl.classList.add('input-error');
-    }
     const labels = missing.map(m => m === 'navn' ? 'Navn' : 'Kategori').join(' og ');
     setStatus(`${labels} må fylles inn før oppskriften kan lagres.`);
     return;
   }
+
+  editData.versions[0].ingredientsList = editData.versions[0].ingredientsList
+    .filter(ing => ing.navn || ing.mengde || ing.enhet || ing.merknad);
+  loading=true;setStatus('Lagrer...');
+  await saveRecipeToDb(editData);
+  loading=false;view='home';editData=null;validationErrors={};render();
+}
 
   editData.versions[0].ingredientsList = editData.versions[0].ingredientsList
     .filter(ing => ing.navn || ing.mengde || ing.enhet || ing.merknad);
