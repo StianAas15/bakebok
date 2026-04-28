@@ -136,6 +136,116 @@ const ROLE_OPTIONS = [
   { id: 'annet',        label: 'Annet' },
 ];
 
+// =====================================================================
+// ENHETSKONVERTERING
+// =====================================================================
+
+// Volumenheter til ml
+const VOLUME_UNITS = {
+  'ml': 1,
+  'cl': 10,
+  'dl': 100,
+  'l': 1000,
+  'liter': 1000,
+  'ts': 5,
+  'tsk': 5,
+  'teskje': 5,
+  'ss': 15,
+  'spsk': 15,
+  'spiseskje': 15,
+  'kopp': 240,
+  'knivsodd': 0.5,
+  'klype': 0.3,
+};
+
+// Vektenheter til gram
+const WEIGHT_UNITS = {
+  'g': 1,
+  'gr': 1,
+  'gram': 1,
+  'kg': 1000,
+  'kilo': 1000,
+};
+
+// Tetthet (g/ml) per rolle
+const ROLE_DENSITY = {
+  'mel_siktet':   0.55,
+  'mel_sammalt':  0.52,
+  'væske':        1.00,
+  'salt':         1.20,
+  'søtning':      0.85,
+  'fett':         0.92,
+  'forfermenter': 1.05,
+  'frø':          0.55,
+  'nøtter':       0.55,
+  'krydder':      0.50,
+};
+
+// Spesielle tettheter for ingredienser som avviker fra rollen
+const INGREDIENT_DENSITY = {
+  'honning':       1.40,
+  'sirup':         1.40,
+  'lys sirup':     1.40,
+  'mørk sirup':    1.40,
+  'lønnesirup':    1.32,
+  'glukosesirup':  1.40,
+  'agavesirup':    1.37,
+  'maltsirup':     1.40,
+  'smør':          0.95,
+  'usaltet smør':  0.95,
+  'meierismør':    0.95,
+  'rørossmør':     0.95,
+  'melis':         0.56,
+  'melissukker':   0.56,
+  'maizena':       0.60,
+  'maisstivelse':  0.60,
+  'kakao':         0.55,
+  'kakaopulver':   0.55,
+  'havregryn':     0.40,
+  'olivenolje':    0.92,
+  'rapsolje':      0.92,
+  'solsikkeolje':  0.92,
+  'kokosolje':     0.92,
+};
+
+// Enheter som ikke kan konverteres (telles som de er)
+const COUNT_UNITS = ['stk', 'pakke', 'plate', 'kapsel', 'dråpe', 'kvist', 'neve', 'bunt', 'boks'];
+
+// Returnerer mengde i gram, eller null hvis ikke konverterbar
+function convertToGrams(mengde, enhet, navn, rolle) {
+  if (mengde === null || mengde === undefined || mengde === '' || isNaN(mengde)) return null;
+  const m = Number(mengde);
+  if (m === 0) return 0;
+
+  const e = (enhet || '').trim().toLowerCase();
+
+  // Allerede vekt
+  if (WEIGHT_UNITS[e] !== undefined) {
+    return m * WEIGHT_UNITS[e];
+  }
+
+  // Stk/plate/pakke - ikke konverterbar
+  if (COUNT_UNITS.includes(e)) return null;
+
+  // Volumenhet?
+  const ml = VOLUME_UNITS[e];
+  if (ml === undefined) return null;
+
+  const totalMl = m * ml;
+
+  // Finn tetthet: spesifikk ingrediens trumfer rolle
+  const navnLow = (navn || '').trim().toLowerCase();
+  let tetthet = INGREDIENT_DENSITY[navnLow];
+
+  if (tetthet === undefined && rolle) {
+    tetthet = ROLE_DENSITY[rolle];
+  }
+
+  if (tetthet === undefined) return null;
+
+  return totalMl * tetthet;
+}
+
 function allCategories() { return [...DEFAULT_CATEGORIES, ...customCategories]; }
 function getCatName(id) { return allCategories().find(c=>c.id===id)?.name || id; }
 function fmt(iso) { return new Date(iso).toLocaleDateString('nb-NO',{day:'2-digit',month:'short',year:'numeric'}); }
@@ -165,42 +275,48 @@ function asNumber(x) {
   return isNaN(n) ? 0 : n;
 }
 
+// Returnerer { melTotal, melSiktet, melSammalt, vaeskeTotal, salt, deigvekt, hydrering, saltPct, grovhet }
 function calcBakePcts(ingList) {
   if (!Array.isArray(ingList)) return null;
   let melSiktet = 0;
   let melSammalt = 0;
   let vaeskeTotal = 0;
   let salt = 0;
+  let deigvekt = 0;
 
   for (const ing of ingList) {
-    const mengde = asNumber(ing.mengde);
-    if (mengde === 0) continue;
+    const grams = convertToGrams(asNumber(ing.mengde), ing.enhet, ing.navn, ing.rolle);
+    if (grams === null || grams === 0) continue;
+
+    deigvekt += grams;
+
     switch (ing.rolle) {
-      case 'mel_siktet':   melSiktet += mengde; break;
-      case 'mel_sammalt':  melSammalt += mengde; break;
-      case 'væske':        vaeskeTotal += mengde; break;
-      case 'egg':          vaeskeTotal += mengde; break;
-      case 'salt':         salt += mengde; break;
+      case 'mel_siktet':   melSiktet += grams; break;
+      case 'mel_sammalt':  melSammalt += grams; break;
+      case 'væske':        vaeskeTotal += grams; break;
+      case 'egg':          vaeskeTotal += grams; break;
+      case 'salt':         salt += grams; break;
       case 'forfermenter':
-        melSiktet += mengde / 2;
-        vaeskeTotal += mengde / 2;
+        melSiktet += grams / 2;
+        vaeskeTotal += grams / 2;
         break;
     }
   }
 
   const melTotal = melSiktet + melSammalt;
-  if (melTotal === 0) return null;
+  if (melTotal === 0) return { melTotal: 0, deigvekt };
+
   const hydrering = (vaeskeTotal / melTotal) * 100;
   const saltPct = (salt / melTotal) * 100;
   const grovhet = (melSammalt / melTotal) * 100;
-  return { melTotal, melSiktet, melSammalt, vaeskeTotal, salt, hydrering, saltPct, grovhet };
+  return { melTotal, melSiktet, melSammalt, vaeskeTotal, salt, deigvekt, hydrering, saltPct, grovhet };
 }
 
 function ingredientPct(ing, melTotal) {
   if (melTotal === 0) return null;
-  const mengde = asNumber(ing.mengde);
-  if (mengde === 0) return null;
-  return (mengde / melTotal) * 100;
+  const grams = convertToGrams(asNumber(ing.mengde), ing.enhet, ing.navn, ing.rolle);
+  if (grams === null || grams === 0) return null;
+  return (grams / melTotal) * 100;
 }
 
 function shouldShowBakePct(categoryId) {
@@ -217,13 +333,25 @@ function fmtPct1(n) {
   return n.toFixed(1) + '%';
 }
 
+function fmtGrams(n) {
+  if (n === null || n === undefined || isNaN(n) || n === 0) return '';
+  if (n >= 1000) return (n / 1000).toFixed(2).replace(/\.?0+$/, '') + ' kg';
+  return Math.round(n) + ' g';
+}
+
 function bakePctSummaryHtml(pcts) {
   if (!pcts) return '';
-  return `<div class="bakepct-summary">
-    <span class="pct-label">Hydrering </span><span class="pct-val">${fmtPct(pcts.hydrering)}</span>
-    <span class="pct-label">Salt </span><span class="pct-val">${fmtPct1(pcts.saltPct)}</span>
-    <span class="pct-label">Grovhet </span><span class="pct-val">${fmtPct(pcts.grovhet)}</span>
-  </div>`;
+  const parts = [];
+  if (pcts.melTotal > 0) {
+    parts.push(`<span class="pct-label">Hydrering </span><span class="pct-val">${fmtPct(pcts.hydrering)}</span>`);
+    parts.push(`<span class="pct-label">Salt </span><span class="pct-val">${fmtPct1(pcts.saltPct)}</span>`);
+    parts.push(`<span class="pct-label">Grovhet </span><span class="pct-val">${fmtPct(pcts.grovhet)}</span>`);
+  }
+  if (pcts.deigvekt > 0) {
+    parts.push(`<span class="pct-label">Deigvekt </span><span class="pct-val">${fmtGrams(pcts.deigvekt)}</span>`);
+  }
+  if (parts.length === 0) return '';
+  return `<div class="bakepct-summary">${parts.join('')}</div>`;
 }
 
 let currentUser = null;
@@ -354,7 +482,7 @@ function settingsView() {
       </div>
     </div>
     <div class="card card-clickable" onclick="setView('roles')">
-      <p style="font-weight:500;margin-bottom:4px">Ingrediensliste og roller</p>
+      <p style="font-weight:500;margin-bottom:4px">Ingrediensliste</p>
       <p class="muted">${Object.keys(ingredientRoles).length} ingredienser. Klikk for å redigere.</p>
     </div>
     <div class="card">
@@ -395,7 +523,7 @@ function rolesView() {
 
   return `
     <div class="topbar no-print"><button class="btn" onclick="setView('settings')">← Tilbake</button></div>
-    <h2>Ingrediensliste og roller</h2>
+    <h2>Ingrediensliste</h2>
     <div class="card">
       <p class="muted" style="margin-bottom:10px">Ingredienser i lista brukes til å foreslå rolle automatisk når du legger inn nye ingredienser. Endringer lagres når du klikker «Lagre endringer».</p>
       <div class="role-search">
@@ -442,7 +570,7 @@ function recipeView() {
         const main = formatIngredient(ing);
         const merknad = ing.merknad ? `<span class="ing-merknad-text">(${ing.merknad})</span>` : '';
         let pctStr = '';
-        if (showPct && pcts) {
+        if (showPct && pcts && pcts.melTotal > 0) {
           const p = ingredientPct(ing, pcts.melTotal);
           if (p !== null) pctStr = `<span class="ing-pct-text">${Math.round(p)}%</span>`;
         }
@@ -558,7 +686,7 @@ function bindEdit() {
   if (container) {
     container.addEventListener('input', (e) => {
       const cls = e.target.classList;
-      if (cls && cls.contains('ing-mengde')) {
+      if (cls && (cls.contains('ing-mengde') || cls.contains('ing-enhet'))) {
         saveFormState();
         render();
       }
