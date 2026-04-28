@@ -60,15 +60,16 @@
   .ing-list-item { padding: 6px 0; font-size: 14px; line-height: 1.5; border-bottom: 0.5px solid #f0f0e8; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
   .ing-list-item:last-child { border-bottom: none; }
   .ing-list-item .ing-merknad-text { color: #888; font-size: 12px; font-style: italic; margin-left: 6px; }
+  .ing-list-item .ing-conv { color: #888; font-size: 12px; margin-left: 4px; }
   .ing-list-item .ing-pct-text { color: #888; font-size: 12px; flex-shrink: 0; min-width: 40px; text-align: right; }
-  .role-row { display: grid; grid-template-columns: 1fr 130px 30px; gap: 6px; margin-bottom: 6px; align-items: center; }
+  .role-row { display: grid; grid-template-columns: 1fr 130px 80px 30px; gap: 6px; margin-bottom: 6px; align-items: center; }
   .role-row input, .role-row select { padding: 6px 8px; font-size: 13px; }
   .role-row .role-remove { border: none; background: transparent; color: #c0392b; cursor: pointer; font-size: 18px; padding: 6px 0; line-height: 1; }
-  .role-list-header { display: grid; grid-template-columns: 1fr 130px 30px; gap: 6px; font-size: 12px; color: #666; padding: 4px 0; border-bottom: 0.5px solid #e0e0d8; margin-bottom: 8px; }
+  .role-list-header { display: grid; grid-template-columns: 1fr 130px 80px 30px; gap: 6px; font-size: 12px; color: #666; padding: 4px 0; border-bottom: 0.5px solid #e0e0d8; margin-bottom: 8px; }
   .role-search { margin-bottom: 12px; }
   .role-list { max-height: 400px; overflow-y: auto; padding-right: 4px; }
   .input-error { border-color: #c0392b !important; background: #fef5f4 !important; }
-  .bakepct-summary { font-size: 13px; color: #555; padding: 8px 12px; background: #f0f0e8; border-radius: 8px; margin-bottom: 12px; }
+  .bakepct-summary { font-size: 13px; color: #555; padding: 8px 12px; background: #f0f0e8; border-radius: 8px; margin-bottom: 12px; line-height: 1.7; }
   .bakepct-summary .pct-label { color: #888; }
   .bakepct-summary .pct-val { font-weight: 600; color: #1a1a1a; margin-right: 12px; }
   @media print {
@@ -136,30 +137,26 @@ const ROLE_OPTIONS = [
   { id: 'annet',        label: 'Annet' },
 ];
 
-// =====================================================================
-// ENHETSKONVERTERING
-// =====================================================================
-
 // Volumenheter til ml
-const VOLUME_UNITS = {
-  'ml': 1,
-  'cl': 10,
-  'dl': 100,
+const VOLUME_TO_ML = {
   'l': 1000,
   'liter': 1000,
-  'ts': 5,
-  'tsk': 5,
-  'teskje': 5,
+  'dl': 100,
+  'cl': 10,
+  'ml': 1,
   'ss': 15,
-  'spsk': 15,
   'spiseskje': 15,
+  'spiseskjeer': 15,
+  'ts': 5,
+  'teskje': 5,
+  'teskjeer': 5,
+  'knivsodd': 1,
   'kopp': 240,
-  'knivsodd': 0.5,
-  'klype': 0.3,
+  'cup': 240,
 };
 
 // Vektenheter til gram
-const WEIGHT_UNITS = {
+const WEIGHT_TO_G = {
   'g': 1,
   'gr': 1,
   'gram': 1,
@@ -167,105 +164,28 @@ const WEIGHT_UNITS = {
   'kilo': 1000,
 };
 
-// Tetthet (g/ml) per rolle
-const ROLE_DENSITY = {
-  'mel_siktet':   0.55,
-  'mel_sammalt':  0.52,
-  'væske':        1.00,
-  'salt':         1.20,
-  'søtning':      0.85,
-  'fett':         0.92,
-  'forfermenter': 1.05,
-  'frø':          0.55,
-  'nøtter':       0.55,
-  'krydder':      0.50,
-};
-
-// Spesielle tettheter for ingredienser som avviker fra rollen
-const INGREDIENT_DENSITY = {
-  'honning':       1.40,
-  'sirup':         1.40,
-  'lys sirup':     1.40,
-  'mørk sirup':    1.40,
-  'lønnesirup':    1.32,
-  'glukosesirup':  1.40,
-  'agavesirup':    1.37,
-  'maltsirup':     1.40,
-  'smør':          0.95,
-  'usaltet smør':  0.95,
-  'meierismør':    0.95,
-  'rørossmør':     0.95,
-  'melis':         0.56,
-  'melissukker':   0.56,
-  'maizena':       0.60,
-  'maisstivelse':  0.60,
-  'kakao':         0.55,
-  'kakaopulver':   0.55,
-  'havregryn':     0.40,
-  'olivenolje':    0.92,
-  'rapsolje':      0.92,
-  'solsikkeolje':  0.92,
-  'kokosolje':     0.92,
-};
-
-// Enheter som ikke kan konverteres (telles som de er)
-const COUNT_UNITS = ['stk', 'pakke', 'plate', 'kapsel', 'dråpe', 'kvist', 'neve', 'bunt', 'boks'];
-
-// Returnerer mengde i gram, eller null hvis ikke konverterbar
-function convertToGrams(mengde, enhet, navn, rolle) {
-  if (mengde === null || mengde === undefined || mengde === '' || isNaN(mengde)) return null;
-  const m = Number(mengde);
-  if (m === 0) return 0;
-
-  const e = (enhet || '').trim().toLowerCase();
-
-  // Allerede vekt
-  if (WEIGHT_UNITS[e] !== undefined) {
-    return m * WEIGHT_UNITS[e];
-  }
-
-  // Stk/plate/pakke - ikke konverterbar
-  if (COUNT_UNITS.includes(e)) return null;
-
-  // Volumenhet?
-  const ml = VOLUME_UNITS[e];
-  if (ml === undefined) return null;
-
-  const totalMl = m * ml;
-
-  // Finn tetthet: spesifikk ingrediens trumfer rolle
-  const navnLow = (navn || '').trim().toLowerCase();
-  let tetthet = INGREDIENT_DENSITY[navnLow];
-
-  if (tetthet === undefined && rolle) {
-    tetthet = ROLE_DENSITY[rolle];
-  }
-
-  if (tetthet === undefined) return null;
-
-  return totalMl * tetthet;
-}
-
 function allCategories() { return [...DEFAULT_CATEGORIES, ...customCategories]; }
 function getCatName(id) { return allCategories().find(c=>c.id===id)?.name || id; }
 function fmt(iso) { return new Date(iso).toLocaleDateString('nb-NO',{day:'2-digit',month:'short',year:'numeric'}); }
 
-function formatIngredient(ing) {
-  const parts = [];
-  if (ing.mengde !== null && ing.mengde !== undefined && ing.mengde !== '') parts.push(ing.mengde);
-  if (ing.enhet) parts.push(ing.enhet);
-  if (ing.navn) parts.push(ing.navn);
-  return parts.join(' ');
-}
-
 function lookupRole(navn) {
   if (!navn) return '';
   const key = navn.trim().toLowerCase();
-  if (ingredientRoles[key]) return ingredientRoles[key];
-  for (const [name, role] of Object.entries(ingredientRoles)) {
-    if (key.includes(name) || name.includes(key)) return role;
+  if (ingredientRoles[key]) return ingredientRoles[key].rolle;
+  for (const [name, data] of Object.entries(ingredientRoles)) {
+    if (key.includes(name) || name.includes(key)) return data.rolle;
   }
   return '';
+}
+
+function lookupTetthet(navn) {
+  if (!navn) return null;
+  const key = navn.trim().toLowerCase();
+  if (ingredientRoles[key]) return ingredientRoles[key].tetthet;
+  for (const [name, data] of Object.entries(ingredientRoles)) {
+    if (key.includes(name) || name.includes(key)) return data.tetthet;
+  }
+  return null;
 }
 
 function asNumber(x) {
@@ -275,7 +195,58 @@ function asNumber(x) {
   return isNaN(n) ? 0 : n;
 }
 
-// Returnerer { melTotal, melSiktet, melSammalt, vaeskeTotal, salt, deigvekt, hydrering, saltPct, grovhet }
+// Konverter en ingrediens-mengde til gram. Returnerer null hvis ikke mulig.
+function tilGram(ing) {
+  const mengde = asNumber(ing.mengde);
+  if (mengde === 0) return null;
+  const enhet = (ing.enhet || '').trim().toLowerCase();
+
+  // Hvis enhet er vekt, returner direkte (ev. konvertert)
+  if (WEIGHT_TO_G[enhet] !== undefined) {
+    return mengde * WEIGHT_TO_G[enhet];
+  }
+
+  // Hvis enhet er volum, krever vi tetthet
+  if (VOLUME_TO_ML[enhet] !== undefined) {
+    const tetthet = lookupTetthet(ing.navn);
+    if (tetthet === null || tetthet === undefined) return null;
+    const ml = mengde * VOLUME_TO_ML[enhet];
+    return ml * tetthet;
+  }
+
+  // Hvis ingen enhet, anta gram
+  if (!enhet) return mengde;
+
+  // Ukjent enhet (stk, pakke, knivsodd osv) – ignorer
+  return null;
+}
+
+// Formatter en ingrediens for visning, evt med konvertering i parentes
+function formatIngredient(ing) {
+  const parts = [];
+  if (ing.mengde !== null && ing.mengde !== undefined && ing.mengde !== '') parts.push(ing.mengde);
+  if (ing.enhet) parts.push(ing.enhet);
+  if (ing.navn) parts.push(ing.navn);
+  return parts.join(' ');
+}
+
+function formatIngredientWithConv(ing) {
+  const main = formatIngredient(ing);
+  const enhet = (ing.enhet || '').trim().toLowerCase();
+  // Vis konvertering kun hvis enhet er volum (ikke vekt eller stk)
+  if (VOLUME_TO_ML[enhet] !== undefined) {
+    const gram = tilGram(ing);
+    if (gram !== null && gram > 0) {
+      return `${main} <span class="ing-conv">(≈ ${Math.round(gram)} g)</span>`;
+    }
+  }
+  return main;
+}
+
+// =====================================================================
+// BAKEPROSENT
+// =====================================================================
+
 function calcBakePcts(ingList) {
   if (!Array.isArray(ingList)) return null;
   let melSiktet = 0;
@@ -285,38 +256,41 @@ function calcBakePcts(ingList) {
   let deigvekt = 0;
 
   for (const ing of ingList) {
-    const grams = convertToGrams(asNumber(ing.mengde), ing.enhet, ing.navn, ing.rolle);
-    if (grams === null || grams === 0) continue;
+    const gram = tilGram(ing);
+    if (gram === null || gram === 0) continue;
 
-    deigvekt += grams;
+    // Alle kjente vekter teller med i deigvekt
+    deigvekt += gram;
 
     switch (ing.rolle) {
-      case 'mel_siktet':   melSiktet += grams; break;
-      case 'mel_sammalt':  melSammalt += grams; break;
-      case 'væske':        vaeskeTotal += grams; break;
-      case 'egg':          vaeskeTotal += grams; break;
-      case 'salt':         salt += grams; break;
+      case 'mel_siktet':   melSiktet += gram; break;
+      case 'mel_sammalt':  melSammalt += gram; break;
+      case 'væske':        vaeskeTotal += gram; break;
+      case 'salt':         salt += gram; break;
       case 'forfermenter':
-        melSiktet += grams / 2;
-        vaeskeTotal += grams / 2;
+        // surdeig deles 50/50 mel siktet/væske
+        melSiktet += gram / 2;
+        vaeskeTotal += gram / 2;
         break;
+      // egg telles IKKE i hydrering, men er allerede med i deigvekt
     }
   }
 
   const melTotal = melSiktet + melSammalt;
-  if (melTotal === 0) return { melTotal: 0, deigvekt };
+  if (melTotal === 0) return { deigvekt };
 
   const hydrering = (vaeskeTotal / melTotal) * 100;
   const saltPct = (salt / melTotal) * 100;
   const grovhet = (melSammalt / melTotal) * 100;
-  return { melTotal, melSiktet, melSammalt, vaeskeTotal, salt, deigvekt, hydrering, saltPct, grovhet };
+
+  return { melTotal, melSiktet, melSammalt, vaeskeTotal, salt, hydrering, saltPct, grovhet, deigvekt };
 }
 
 function ingredientPct(ing, melTotal) {
   if (melTotal === 0) return null;
-  const grams = convertToGrams(asNumber(ing.mengde), ing.enhet, ing.navn, ing.rolle);
-  if (grams === null || grams === 0) return null;
-  return (grams / melTotal) * 100;
+  const gram = tilGram(ing);
+  if (gram === null || gram === 0) return null;
+  return (gram / melTotal) * 100;
 }
 
 function shouldShowBakePct(categoryId) {
@@ -327,37 +301,35 @@ function fmtPct(n) {
   if (n === null || n === undefined || isNaN(n)) return '';
   return Math.round(n) + '%';
 }
-
 function fmtPct1(n) {
   if (n === null || n === undefined || isNaN(n)) return '';
   return n.toFixed(1) + '%';
 }
 
-function fmtGrams(n) {
-  if (n === null || n === undefined || isNaN(n) || n === 0) return '';
-  if (n >= 1000) return (n / 1000).toFixed(2).replace(/\.?0+$/, '') + ' kg';
-  return Math.round(n) + ' g';
+function bakePctSummaryHtml(pcts, showBakePct) {
+  if (!pcts) return '';
+  const deigvektStr = pcts.deigvekt > 0 ? `<span class="pct-label">Deigvekt </span><span class="pct-val">${Math.round(pcts.deigvekt)} g</span>` : '';
+
+  if (!showBakePct || !pcts.hydrering) {
+    return deigvektStr ? `<div class="bakepct-summary">${deigvektStr}</div>` : '';
+  }
+
+  return `<div class="bakepct-summary">
+    <span class="pct-label">Hydrering </span><span class="pct-val">${fmtPct(pcts.hydrering)}</span>
+    <span class="pct-label">Salt </span><span class="pct-val">${fmtPct1(pcts.saltPct)}</span>
+    <span class="pct-label">Grovhet </span><span class="pct-val">${fmtPct(pcts.grovhet)}</span>
+    ${deigvektStr}
+  </div>`;
 }
 
-function bakePctSummaryHtml(pcts) {
-  if (!pcts) return '';
-  const parts = [];
-  if (pcts.melTotal > 0) {
-    parts.push(`<span class="pct-label">Hydrering </span><span class="pct-val">${fmtPct(pcts.hydrering)}</span>`);
-    parts.push(`<span class="pct-label">Salt </span><span class="pct-val">${fmtPct1(pcts.saltPct)}</span>`);
-    parts.push(`<span class="pct-label">Grovhet </span><span class="pct-val">${fmtPct(pcts.grovhet)}</span>`);
-  }
-  if (pcts.deigvekt > 0) {
-    parts.push(`<span class="pct-label">Deigvekt </span><span class="pct-val">${fmtGrams(pcts.deigvekt)}</span>`);
-  }
-  if (parts.length === 0) return '';
-  return `<div class="bakepct-summary">${parts.join('')}</div>`;
-}
+// =====================================================================
+// STATE
+// =====================================================================
 
 let currentUser = null;
 let recipes = [];
 let customCategories = [];
-let ingredientRoles = {};
+let ingredientRoles = {}; // { 'hvetemel': { rolle: 'mel_siktet', tetthet: 0.55 }, ... }
 let coverImageUrl = null;
 let anthropicKey = null;
 let view = 'login';
@@ -483,7 +455,7 @@ function settingsView() {
     </div>
     <div class="card card-clickable" onclick="setView('roles')">
       <p style="font-weight:500;margin-bottom:4px">Ingrediensliste</p>
-      <p class="muted">${Object.keys(ingredientRoles).length} ingredienser. Klikk for å redigere.</p>
+      <p class="muted">${Object.keys(ingredientRoles).length} ingredienser. Klikk for å redigere roller og tettheter.</p>
     </div>
     <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Opprett ny bruker</p>
@@ -513,19 +485,23 @@ function rolesView() {
   const roleOptionsHtml = (selected) =>
     ROLE_OPTIONS.map(r => `<option value="${r.id}" ${r.id===selected?'selected':''}>${r.label}</option>`).join('');
 
-  const rows = entries.map(([navn, rolle]) => `
+  const rows = entries.map(([navn, data]) => {
+    const tetthetVal = (data.tetthet === null || data.tetthet === undefined) ? '' : data.tetthet;
+    return `
     <div class="role-row" data-navn="${navn}">
       <input type="text" class="role-navn" value="${navn}" data-original="${navn}">
-      <select class="role-rolle">${roleOptionsHtml(rolle)}</select>
+      <select class="role-rolle">${roleOptionsHtml(data.rolle)}</select>
+      <input type="text" class="role-tetthet" value="${tetthetVal}" placeholder="g/ml">
       <button type="button" class="role-remove" onclick="deleteIngredientRole('${navn}')" title="Slett">×</button>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   return `
     <div class="topbar no-print"><button class="btn" onclick="setView('settings')">← Tilbake</button></div>
     <h2>Ingrediensliste</h2>
     <div class="card">
-      <p class="muted" style="margin-bottom:10px">Ingredienser i lista brukes til å foreslå rolle automatisk når du legger inn nye ingredienser. Endringer lagres når du klikker «Lagre endringer».</p>
+      <p class="muted" style="margin-bottom:10px">Ingredienser i lista brukes til å foreslå rolle og tetthet automatisk når du legger inn nye ingredienser. Tetthet (g/ml) brukes til å regne om volumenheter (dl, ss, ts) til gram. Endringer lagres når du klikker «Lagre endringer».</p>
       <div class="role-search">
         <input type="text" id="role-search" placeholder="Søk i lista..." value="${roleSearch || ''}">
       </div>
@@ -536,6 +512,7 @@ function rolesView() {
       <div class="role-row">
         <input type="text" id="new-role-navn" placeholder="F.eks. Bjørkeblad">
         <select id="new-role-rolle">${roleOptionsHtml('annet')}</select>
+        <input type="text" id="new-role-tetthet" placeholder="g/ml">
         <button type="button" class="btn-primary" style="padding:6px 10px;font-size:13px" onclick="addIngredientRole()">+</button>
       </div>
     </div>
@@ -543,6 +520,7 @@ function rolesView() {
       <div class="role-list-header">
         <span>Navn</span>
         <span>Rolle</span>
+        <span>Tetthet</span>
         <span></span>
       </div>
       <div class="role-list">${rows || '<p class="muted">Ingen treff.</p>'}</div>
@@ -562,16 +540,17 @@ function recipeView() {
 
   const ingList = (v.ingredientsList || []);
   const showPct = shouldShowBakePct(r.category);
-  const pcts = showPct ? calcBakePcts(ingList) : null;
+  const pcts = calcBakePcts(ingList);
+  const melTotal = pcts && pcts.melTotal ? pcts.melTotal : 0;
 
   const ingHtml = ingList.length === 0
     ? `<p class="muted">Ingen ingredienser registrert.</p>`
     : ingList.map(ing => {
-        const main = formatIngredient(ing);
+        const main = formatIngredientWithConv(ing);
         const merknad = ing.merknad ? `<span class="ing-merknad-text">(${ing.merknad})</span>` : '';
         let pctStr = '';
-        if (showPct && pcts && pcts.melTotal > 0) {
-          const p = ingredientPct(ing, pcts.melTotal);
+        if (showPct && melTotal > 0) {
+          const p = ingredientPct(ing, melTotal);
           if (p !== null) pctStr = `<span class="ing-pct-text">${Math.round(p)}%</span>`;
         }
         return `<div class="ing-list-item"><span>${main}${merknad}</span>${pctStr}</div>`;
@@ -587,7 +566,7 @@ function recipeView() {
     <p class="muted" style="margin-bottom:4px">${catName}</p>
     <h2 style="margin-bottom:12px">${r.name}</h2>
     ${tabs}${imgs}
-    ${showPct ? bakePctSummaryHtml(pcts) : ''}
+    ${bakePctSummaryHtml(pcts, showPct)}
     ${v.notes?`<div class="info-box">${v.notes}</div>`:''}
     <div class="card"><p style="font-weight:500;margin-bottom:8px">Ingredienser</p>${ingHtml}</div>
     <div class="card"><p style="font-weight:500;margin-bottom:8px">Fremgangsmåte</p><pre>${v.steps || ''}</pre></div>`;
@@ -621,11 +600,11 @@ function editView() {
 
   const ingList = v.ingredientsList || [];
   const showPct = shouldShowBakePct(editData.category);
-  const pcts = showPct ? calcBakePcts(ingList) : null;
-  const melTotal = pcts ? pcts.melTotal : 0;
+  const pcts = calcBakePcts(ingList);
+  const melTotal = pcts && pcts.melTotal ? pcts.melTotal : 0;
 
   const ingRowsHtml = ingList.map((ing, i) => ingredientRowHtml(ing, i, melTotal, showPct)).join('');
-  const summaryHtml = showPct ? bakePctSummaryHtml(pcts) : '';
+  const summaryHtml = bakePctSummaryHtml(pcts, showPct);
 
   return `
     <div class="topbar"><button class="btn" onclick="setView('home')">← Avbryt</button></div>
@@ -832,7 +811,10 @@ async function loadIngredientRoles() {
   snap.docs.forEach(d => {
     const data = d.data();
     if (data.navn && data.rolle !== undefined) {
-      ingredientRoles[data.navn.toLowerCase()] = data.rolle;
+      ingredientRoles[data.navn.toLowerCase()] = {
+        rolle: data.rolle,
+        tetthet: (data.tetthet === undefined) ? null : data.tetthet
+      };
     }
   });
 }
@@ -873,15 +855,23 @@ async function deleteCustomCat(id) {
 function ingredientRoleId(navn) {
   return navn.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9æøå_]/g, '');
 }
+
+function parseTetthet(str) {
+  if (str === null || str === undefined || str === '') return null;
+  const n = parseFloat(String(str).replace(',', '.'));
+  return isNaN(n) ? null : n;
+}
+
 async function addIngredientRole() {
   const navn = document.getElementById('new-role-navn').value.trim();
   const rolle = document.getElementById('new-role-rolle').value;
+  const tetthet = parseTetthet(document.getElementById('new-role-tetthet').value);
   if (!navn) { setStatus('Skriv inn et ingrediensnavn.'); return; }
   const navnLow = navn.toLowerCase();
   const id = ingredientRoleId(navn);
-  await setDoc(doc(db, 'ingredient_roles', id), { navn: navnLow, rolle });
-  ingredientRoles[navnLow] = rolle;
-  setStatus(`Lagt til "${navn}" som ${rolle || 'ingen rolle'}.`);
+  await setDoc(doc(db, 'ingredient_roles', id), { navn: navnLow, rolle, tetthet });
+  ingredientRoles[navnLow] = { rolle, tetthet };
+  setStatus(`Lagt til "${navn}".`);
   setTimeout(() => { statusMsg = ''; render(); }, 2000);
   render();
 }
@@ -894,32 +884,32 @@ async function deleteIngredientRole(navn) {
 }
 async function saveAllRoleEdits() {
   const rows = document.querySelectorAll('.role-row[data-navn]');
-  let endret = 0, slettet = 0, lagtTil = 0;
+  let endret = 0;
   setStatus('Lagrer endringer...');
 
   for (const row of rows) {
     const original = row.querySelector('.role-navn').dataset.original;
     const nyttNavn = row.querySelector('.role-navn').value.trim().toLowerCase();
     const nyRolle = row.querySelector('.role-rolle').value;
-    const originalRolle = ingredientRoles[original];
+    const nyTetthet = parseTetthet(row.querySelector('.role-tetthet').value);
+    const originalData = ingredientRoles[original] || {};
 
     if (!nyttNavn) continue;
 
     if (nyttNavn !== original) {
       await deleteDoc(doc(db, 'ingredient_roles', ingredientRoleId(original)));
       delete ingredientRoles[original];
-      await setDoc(doc(db, 'ingredient_roles', ingredientRoleId(nyttNavn)), { navn: nyttNavn, rolle: nyRolle });
-      ingredientRoles[nyttNavn] = nyRolle;
-      slettet++; lagtTil++;
-    } else if (nyRolle !== originalRolle) {
-      await setDoc(doc(db, 'ingredient_roles', ingredientRoleId(nyttNavn)), { navn: nyttNavn, rolle: nyRolle });
-      ingredientRoles[nyttNavn] = nyRolle;
+      await setDoc(doc(db, 'ingredient_roles', ingredientRoleId(nyttNavn)), { navn: nyttNavn, rolle: nyRolle, tetthet: nyTetthet });
+      ingredientRoles[nyttNavn] = { rolle: nyRolle, tetthet: nyTetthet };
+      endret++;
+    } else if (nyRolle !== originalData.rolle || nyTetthet !== originalData.tetthet) {
+      await setDoc(doc(db, 'ingredient_roles', ingredientRoleId(nyttNavn)), { navn: nyttNavn, rolle: nyRolle, tetthet: nyTetthet });
+      ingredientRoles[nyttNavn] = { rolle: nyRolle, tetthet: nyTetthet };
       endret++;
     }
   }
 
-  const sum = endret + slettet + lagtTil;
-  setStatus(sum === 0 ? 'Ingen endringer.' : `Lagret. ${endret} endret${slettet ? `, ${slettet} omdøpt` : ''}.`);
+  setStatus(endret === 0 ? 'Ingen endringer.' : `Lagret. ${endret} endring${endret===1?'':'er'}.`);
   setTimeout(() => { statusMsg = ''; render(); }, 2500);
 }
 
@@ -1021,7 +1011,6 @@ function saveFormState() {
 }
 async function handleSave() {
   saveFormState();
-
   validationErrors = {};
   const missing = [];
   if (!editData.name.trim()) { missing.push('Navn'); validationErrors.name = true; }
