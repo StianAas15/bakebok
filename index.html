@@ -1032,7 +1032,6 @@ Svar KUN med JSON, ingen annen tekst.`;
 
 // Opprett ny bruker
 async function createNewUser() {
-async function createNewUser() {
   const emailEl = document.getElementById('new-user-email');
   const passEl = document.getElementById('new-user-pass');
   const email = emailEl.value.trim();
@@ -1055,8 +1054,7 @@ async function createNewUser() {
     return;
   }
 
-  setStatus('Oppretter bruker...');
-  setStatus('Oppretter bruker...');
+    setStatus('Oppretter bruker...');
   try {
     const createUser = httpsCallable(functions, 'createUser');
     const result = await createUser({ email, password: pass });
