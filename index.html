@@ -663,11 +663,14 @@ function bindEdit() {
 
   const container = document.getElementById('ing-container');
   if (container) {
+    let recalcTimer = null;
     container.addEventListener('input', (e) => {
       const cls = e.target.classList;
       if (cls && (cls.contains('ing-mengde') || cls.contains('ing-enhet'))) {
+        // Lagre i state med en gang, men oppdater visning utsatt
         saveFormState();
-        render();
+        clearTimeout(recalcTimer);
+        recalcTimer = setTimeout(() => updateBakePctsInPlace(), 400);
       }
     });
 
@@ -935,6 +938,44 @@ function setStatus(s){statusMsg=s;render();}
 function selectCat(id){activeCategory=id;render();}
 function backFromRecipe(){view='home';render();}
 
+function updateBakePctsInPlace() {
+  if (!editData) return;
+  const ingList = editData.versions[0].ingredientsList || [];
+  const showPct = shouldShowBakePct(editData.category);
+  const pcts = calcBakePcts(ingList);
+  const melTotal = pcts && pcts.melTotal ? pcts.melTotal : 0;
+
+  // Oppdater oppsummering øverst
+  const summary = document.querySelector('.bakepct-summary');
+  if (summary) {
+    const newSummary = bakePctSummaryHtml(pcts, showPct);
+    if (newSummary) {
+      summary.outerHTML = newSummary;
+    } else {
+      summary.remove();
+    }
+  } else if (pcts && (pcts.deigvekt > 0 || (showPct && pcts.hydrering))) {
+    // Ingen oppsummering finnes, men vi har data nå – gjør full render
+    render();
+    return;
+  }
+
+  // Oppdater prosent-tall ved hver ingrediens
+  const rows = document.querySelectorAll('.ing-row');
+  rows.forEach((row, i) => {
+    const ing = ingList[i];
+    if (!ing) return;
+    const pctSpan = row.querySelector('.ing-pct');
+    if (!pctSpan) return;
+    let pctStr = '';
+    if (showPct && melTotal > 0) {
+      const p = ingredientPct(ing, melTotal);
+      if (p !== null) pctStr = Math.round(p) + '%';
+    }
+    pctSpan.textContent = pctStr;
+  });
+}
+ 
 function emptyIngredient() {
   return { mengde: '', enhet: '', navn: '', merknad: '', rolle: '' };
 }
