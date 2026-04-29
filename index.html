@@ -663,14 +663,15 @@ function bindEdit() {
 
   const container = document.getElementById('ing-container');
   if (container) {
-    let recalcTimer = null;
+    window.recalcTimer = window.recalcTimer || null;
+let recalcTimer = window.recalcTimer;
     container.addEventListener('input', (e) => {
       const cls = e.target.classList;
       if (cls && (cls.contains('ing-mengde') || cls.contains('ing-enhet'))) {
         // Lagre i state med en gang, men oppdater visning utsatt
         saveFormState();
         clearTimeout(recalcTimer);
-        recalcTimer = setTimeout(() => updateBakePctsInPlace(), 400);
+        window.recalcTimer = setTimeout(() => updateBakePctsInPlace(), 400);
       }
     });
 
@@ -1006,6 +1007,7 @@ function startEdit() {
   view='edit';render();
 }
 function addIngredient() {
+  if (window.recalcTimer) clearTimeout(window.recalcTimer);
   saveFormState();
   editData.versions[0].ingredientsList.push(emptyIngredient());
   render();
