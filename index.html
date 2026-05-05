@@ -37,6 +37,7 @@
   pre { white-space: pre-wrap; font-family: inherit; font-size: 14px; line-height: 1.7; }
   img.recipe-img { width: 100%; border-radius: 8px; margin-bottom: 8px; }
   .info-box { background: #f0f0e8; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 12px; font-size: 13px; color: #555; }
+  .warn-box { background: #fff3cd; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 12px; font-size: 13px; color: #856404; }
   .hero { width: 100%; height: 180px; border-radius: 16px; overflow: hidden; margin-bottom: 1.25rem; cursor: pointer; }
   .hero img { width: 100%; height: 100%; object-fit: cover; }
   .hero-placeholder { width: 100%; height: 180px; border-radius: 16px; background: linear-gradient(135deg, #e8e4d8, #d4c9a8); margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: center; font-size: 48px; cursor: pointer; }
@@ -89,21 +90,33 @@
   .bakery-checkbox-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
   .bakery-checkbox-row input { width: auto; }
   .recipe-bakery-tag { display: inline-block; font-size: 11px; background: #e8f4ef; color: #1D9E75; padding: 2px 8px; border-radius: 10px; margin-right: 4px; margin-top: 4px; }
-
-  /* Modulmeny i bakeriet */
   .module-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1.25rem; }
   .module-btn { border: 0.5px solid #e0e0d8; border-radius: 12px; padding: 18px 14px; background: #fff; cursor: pointer; text-align: left; transition: all 0.15s; width: 100%; display: flex; align-items: center; gap: 12px; }
   .module-btn:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-color: #1D9E75; }
   .module-btn .module-icon { font-size: 26px; line-height: 1; }
   .module-btn .module-name { font-size: 14px; font-weight: 500; }
-
-  /* Kategori-chips inne i bakeri-oppskrifter */
   .filter-chips { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0 12px; margin-bottom: 4px; -webkit-overflow-scrolling: touch; }
   .filter-chips::-webkit-scrollbar { display: none; }
   .chip { flex-shrink: 0; border: 0.5px solid #e0e0d8; border-radius: 16px; padding: 5px 12px; background: #fff; cursor: pointer; font-size: 13px; color: #1a1a1a; white-space: nowrap; }
   .chip:hover { background: #f0f0e8; }
   .chip.active { background: #1D9E75; border-color: #1D9E75; color: #fff; }
   .chip .chip-count { opacity: 0.6; margin-left: 4px; font-size: 11px; }
+
+  /* Råvarepriser */
+  .price-row { display: grid; grid-template-columns: 1fr 140px 30px; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 0.5px solid #f0f0e8; }
+  .price-row:last-child { border-bottom: none; }
+  .price-row .price-name { font-size: 14px; font-weight: 500; }
+  .price-row .price-info { font-size: 12px; color: #666; margin-top: 2px; }
+  .price-row .price-amount { font-size: 13px; color: #1a1a1a; font-weight: 500; text-align: right; }
+  .price-row .price-amount-sub { font-size: 11px; color: #888; text-align: right; margin-top: 2px; }
+  .price-row .price-remove { border: none; background: transparent; color: #c0392b; cursor: pointer; font-size: 18px; padding: 6px 0; line-height: 1; }
+  .add-price-grid { display: grid; grid-template-columns: 80px 1fr 60px; gap: 6px; align-items: center; margin-bottom: 8px; }
+  .price-suggestion { padding: 8px 12px; background: #f0f0e8; border-radius: 6px; font-size: 13px; cursor: pointer; margin-bottom: 4px; }
+  .price-suggestion:hover { background: #e0e0d8; }
+  .price-suggestion .muted { font-size: 11px; }
+  .cost-summary { background: #f0f0e8; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; line-height: 1.6; }
+  .cost-summary .cost-main { font-size: 16px; font-weight: 600; color: #1a1a1a; }
+  .cost-summary .cost-sub { color: #666; }
 
   @media print {
     .no-print { display: none !important; }
@@ -180,6 +193,9 @@ const VOLUME_TO_ML = {
 const WEIGHT_TO_G = {
   'g': 1, 'gr': 1, 'gram': 1, 'kg': 1000, 'kilo': 1000,
 };
+
+// Pakkeenheter for råvarepriser
+const PRICE_UNITS = ['kg', 'g', 'l', 'dl', 'ml', 'stk', 'pakke'];
 
 function allCategories() { return [...DEFAULT_CATEGORIES, ...customCategories]; }
 function getCatName(id) { return allCategories().find(c=>c.id===id)?.name || id; }
@@ -312,6 +328,115 @@ function bakePctSummaryHtml(pcts, showBakePct) {
 }
 
 // =====================================================================
+// RÅVAREKOSTNAD
+// =====================================================================
+
+// Konverter prisens enhet til kr per gram (eller per stk for stk-prisede)
+function pricePerGram(prisData) {
+  if (!prisData) return null;
+  const pris = asNumber(prisData.pris);
+  const pakkemengde = asNumber(prisData.pakkemengde);
+  const enhet = (prisData.enhet || '').trim().toLowerCase();
+  if (pris === 0 || pakkemengde === 0) return null;
+
+  // Vekt
+  if (WEIGHT_TO_G[enhet] !== undefined) {
+    const totalGram = pakkemengde * WEIGHT_TO_G[enhet];
+    return { krPerGram: pris / totalGram, type: 'vekt' };
+  }
+  // Volum (krever tetthet for å regne om til gram)
+  if (VOLUME_TO_ML[enhet] !== undefined) {
+    const totalMl = pakkemengde * VOLUME_TO_ML[enhet];
+    return { krPerMl: pris / totalMl, type: 'volum' };
+  }
+  // Stk eller pakke
+  if (enhet === 'stk' || enhet === 'pakke') {
+    return { krPerStk: pris / pakkemengde, type: 'stk' };
+  }
+  return null;
+}
+
+// Hva koster denne ingrediensen i denne mengden?
+function ingredientCost(ing, prisData) {
+  if (!prisData) return null;
+  const ppg = pricePerGram(prisData);
+  if (!ppg) return null;
+
+  const mengde = asNumber(ing.mengde);
+  if (mengde === 0) return null;
+  const enhet = (ing.enhet || '').trim().toLowerCase();
+
+  // Hvis prisen er per stk, og mengden er i stk
+  if (ppg.type === 'stk') {
+    if (enhet === 'stk' || enhet === 'pakke' || !enhet) {
+      return mengde * ppg.krPerStk;
+    }
+    return null;
+  }
+
+  // Hvis prisen er per vekt
+  if (ppg.type === 'vekt') {
+    const gram = tilGram(ing);
+    if (gram === null) return null;
+    return gram * ppg.krPerGram;
+  }
+
+  // Hvis prisen er per volum
+  if (ppg.type === 'volum') {
+    if (VOLUME_TO_ML[enhet] !== undefined) {
+      const ml = mengde * VOLUME_TO_ML[enhet];
+      return ml * ppg.krPerMl;
+    }
+    // Hvis ingrediensen er i vekt og prisen i volum, krever vi tetthet
+    if (WEIGHT_TO_G[enhet] !== undefined) {
+      const tetthet = lookupTetthet(ing.navn);
+      if (!tetthet) return null;
+      const gram = mengde * WEIGHT_TO_G[enhet];
+      const ml = gram / tetthet;
+      return ml * ppg.krPerMl;
+    }
+    return null;
+  }
+
+  return null;
+}
+
+function calcRecipeCost(ingList) {
+  if (!Array.isArray(ingList)) return null;
+  let totalCost = 0;
+  let knownCount = 0;
+  let unknownCount = 0;
+  const unknownNames = [];
+
+  for (const ing of ingList) {
+    if (!ing.navn || asNumber(ing.mengde) === 0) continue;
+    const navnKey = ing.navn.trim().toLowerCase();
+    const prisData = bakeryPrices[navnKey];
+    if (prisData) {
+      const cost = ingredientCost(ing, prisData);
+      if (cost !== null) {
+        totalCost += cost;
+        knownCount++;
+      } else {
+        unknownCount++;
+        unknownNames.push(ing.navn);
+      }
+    } else {
+      unknownCount++;
+      unknownNames.push(ing.navn);
+    }
+  }
+
+  if (knownCount === 0) return null;
+  return { totalCost, knownCount, unknownCount, unknownNames };
+}
+
+function fmtKr(n) {
+  if (n === null || n === undefined || isNaN(n)) return '';
+  return n.toFixed(2).replace('.', ',') + ' kr';
+}
+
+// =====================================================================
 // STATE
 // =====================================================================
 
@@ -320,6 +445,7 @@ let recipes = [];
 let customCategories = [];
 let bakeries = [];
 let ingredientRoles = {};
+let bakeryPrices = {}; // { 'hvetemel': { pris: 250, pakkemengde: 25, enhet: 'kg' } }
 let coverImageUrl = null;
 let anthropicKey = null;
 let view = 'login';
@@ -332,6 +458,7 @@ let activeCategory = null;
 let activeBakery = null;
 let loginMode = 'choose';
 let roleSearch = '';
+let priceSearch = '';
 let validationErrors = {};
 
 function render() {
@@ -344,6 +471,7 @@ function render() {
     view === 'bakery_select' ? bakerySelectView() :
     view === 'bakery_home' ? bakeryHomeView() :
     view === 'bakery_recipes' ? bakeryRecipesView() :
+    view === 'bakery_prices' ? bakeryPricesView() :
     view === 'edit' ? editView() :
     view === 'recipe' ? recipeView() :
     homeView()
@@ -351,6 +479,7 @@ function render() {
   if (view === 'edit') bindEdit();
   if (view === 'settings') bindSettings();
   if (view === 'roles') bindRoles();
+  if (view === 'bakery_prices') bindPrices();
 }
 
 function loginView() {
@@ -431,8 +560,8 @@ function homeView() {
       <button class="btn" onclick="setView('settings')">Innstillinger</button>
       <button class="btn-primary" onclick="startNew()">+ Ny</button>
     </div></div>
-    ${loading?`<p class="status">Laster...</p>`:''}
-    ${statusMsg?`<p class="status">${statusMsg}</p>`:''}
+    ${loading?`<p class="status">Henter oppskrifter...</p>`:''}
+    ${statusMsg && !loading?`<p class="status">${statusMsg}</p>`:''}
     ${!activeCategory ? bakeryBannerHtml() : ''}
     ${!activeCategory?`<div class="categories">${catGrid}</div>`:recipeList}`;
 }
@@ -458,25 +587,18 @@ function bakeryHomeView() {
   const bakeryRecipes = recipes.filter(r => Array.isArray(r.bakeries) && r.bakeries.includes(b.id));
 
   const modules = [
-    { id: 'recipes', icon: '🍞', name: 'Oppskrifter', count: bakeryRecipes.length },
-    { id: 'prices', icon: '💰', name: 'Råvarepriser' },
-    { id: 'plan', icon: '📋', name: 'Dagsplan' },
-    { id: 'inventory', icon: '📦', name: 'Lager & bestilling' },
-    { id: 'stats', icon: '📊', name: 'Statistikk' },
+    { id: 'recipes', icon: '🍞', name: 'Oppskrifter', action: "enterBakeryRecipes()" },
+    { id: 'prices', icon: '💰', name: 'Råvarepriser', action: "enterBakeryPrices()" },
+    { id: 'plan', icon: '📋', name: 'Dagsplan', action: "moduleNotReady()" },
+    { id: 'inventory', icon: '📦', name: 'Lager & bestilling', action: "moduleNotReady()" },
+    { id: 'stats', icon: '📊', name: 'Statistikk', action: "moduleNotReady()" },
   ];
 
-  const modBtns = modules.map(m => {
-    if (m.id === 'recipes') {
-      return `<button class="module-btn" onclick="enterBakeryRecipes()">
-        <span class="module-icon">${m.icon}</span>
-        <span class="module-name">${m.name}</span>
-      </button>`;
-    }
-    return `<button class="module-btn" onclick="moduleNotReady()">
+  const modBtns = modules.map(m => `
+    <button class="module-btn" onclick="${m.action}">
       <span class="module-icon">${m.icon}</span>
       <span class="module-name">${m.name}</span>
-    </button>`;
-  }).join('');
+    </button>`).join('');
 
   return `
     <div class="topbar no-print"><button class="btn" onclick="exitBakery()">← Hovedside</button></div>
@@ -492,7 +614,6 @@ function bakeryRecipesView() {
 
   const bakeryRecipes = recipes.filter(r => Array.isArray(r.bakeries) && r.bakeries.includes(b.id));
 
-  // Bygg chips kun for kategorier som faktisk har oppskrifter
   const usedCategoryIds = [...new Set(bakeryRecipes.map(r => r.category))];
   const usedCategories = allCategories().filter(c => usedCategoryIds.includes(c.id));
 
@@ -528,6 +649,91 @@ function bakeryRecipesView() {
     <h2 style="margin-bottom:8px">Oppskrifter</h2>
     ${bakeryRecipes.length > 0 ? chips : ''}
     ${recipeList}`;
+}
+
+function bakeryPricesView() {
+  const b = bakeries.find(x => x.id === activeBakery);
+  if (!b) { view = 'home'; activeBakery = null; return homeView(); }
+
+  const search = (priceSearch || '').toLowerCase();
+
+  // Liste over priser jeg allerede har
+  const priceEntries = Object.entries(bakeryPrices)
+    .sort((a, b) => a[0].localeCompare(b[0], 'nb'));
+
+  const priceList = priceEntries.length === 0
+    ? `<p class="muted" style="margin-bottom:8px">Ingen råvarepriser registrert ennå. Bruk søkefeltet under for å legge til.</p>`
+    : priceEntries.map(([navn, data]) => {
+        const ppg = pricePerGram(data);
+        let perUnit = '';
+        if (ppg) {
+          if (ppg.type === 'vekt') perUnit = `${(ppg.krPerGram * 1000).toFixed(2).replace('.', ',')} kr/kg`;
+          else if (ppg.type === 'volum') perUnit = `${(ppg.krPerMl * 1000).toFixed(2).replace('.', ',')} kr/l`;
+          else if (ppg.type === 'stk') perUnit = `${ppg.krPerStk.toFixed(2).replace('.', ',')} kr/stk`;
+        }
+        return `
+          <div class="price-row">
+            <div>
+              <div class="price-name">${navn}</div>
+              <div class="price-info">${data.pris} kr / ${data.pakkemengde} ${data.enhet}</div>
+            </div>
+            <div>
+              <div class="price-amount">${perUnit}</div>
+            </div>
+            <button class="price-remove" onclick="deleteBakeryPrice('${navn}')" title="Slett">×</button>
+          </div>`;
+      }).join('');
+
+  // Søkeforslag fra ingredienslista – kun de som IKKE allerede har pris
+  let suggestionsHtml = '';
+  if (search.length >= 2) {
+    const allIng = Object.keys(ingredientRoles)
+      .filter(navn => navn.includes(search))
+      .filter(navn => !bakeryPrices[navn])
+      .sort((a, b) => a.localeCompare(b, 'nb'))
+      .slice(0, 8);
+
+    if (allIng.length > 0) {
+      suggestionsHtml = `
+        <p class="muted" style="margin:10px 0 6px">Forslag fra ingredienslista:</p>
+        ${allIng.map(navn => `
+          <div class="price-suggestion" onclick="selectPriceIngredient('${navn}')">${navn}</div>
+        `).join('')}`;
+    } else {
+      suggestionsHtml = `<p class="muted" style="margin-top:10px">Ingen treff. Du kan også legge til prisen direkte under.</p>`;
+    }
+  }
+
+  const unitOpts = PRICE_UNITS.map(u => `<option value="${u}">${u}</option>`).join('');
+
+  return `
+    <div class="topbar no-print"><button class="btn" onclick="exitBakeryPrices()">← Bakeri</button></div>
+    <p class="muted" style="margin-bottom:4px">${b.name}</p>
+    <h2 style="margin-bottom:12px">Råvarepriser</h2>
+
+    <div class="card">
+      <p style="font-weight:500;margin-bottom:8px">Legg til pris</p>
+      <p class="muted" style="margin-bottom:10px">Søk i ingredienslista, så fyller jeg ut navnet for deg.</p>
+      <input type="text" id="price-search" placeholder="Søk etter ingrediens..." value="${priceSearch || ''}">
+      ${suggestionsHtml}
+
+      <label>Ingrediens</label>
+      <input type="text" id="new-price-navn" placeholder="F.eks. hvetemel" value="${window._newPriceNavn || ''}">
+
+      <label>Pris og pakkemengde</label>
+      <div class="add-price-grid">
+        <input type="text" id="new-price-pris" placeholder="kr">
+        <input type="text" id="new-price-pakke" placeholder="Pakkemengde (f.eks. 25)">
+        <select id="new-price-enhet">${unitOpts}</select>
+      </div>
+      <button class="btn-primary" style="width:100%;margin-top:6px" onclick="addBakeryPrice()">+ Lagre pris</button>
+    </div>
+
+    <div class="card">
+      <p style="font-weight:500;margin-bottom:10px">Mine priser (${priceEntries.length})</p>
+      ${priceList}
+    </div>
+    ${statusMsg?`<p class="status">${statusMsg}</p>`:''}`;
 }
 
 function settingsView() {
@@ -691,6 +897,25 @@ function recipeView() {
         return `<div class="ing-list-item"><span>${main}${merknad}</span>${pctStr}</div>`;
       }).join('');
 
+  // Råvarekostnad – vises kun hvis vi er inne i et bakeri
+  let costHtml = '';
+  if (activeBakery) {
+    const cost = calcRecipeCost(ingList);
+    if (cost) {
+      const perKg = pcts && pcts.deigvekt > 0 ? (cost.totalCost / pcts.deigvekt * 1000) : null;
+      costHtml = `
+        <div class="cost-summary">
+          <div class="cost-main">Råvarekostnad: ${fmtKr(cost.totalCost)}</div>
+          ${perKg ? `<div class="cost-sub">${fmtKr(perKg)} per kg deig</div>` : ''}
+          ${cost.unknownCount > 0 ? `<div class="cost-sub" style="color:#856404;margin-top:4px">⚠ Mangler pris på ${cost.unknownCount} ingrediens${cost.unknownCount===1?'':'er'}: ${cost.unknownNames.join(', ')}</div>` : ''}
+        </div>`;
+    } else if (Object.keys(bakeryPrices).length === 0) {
+      costHtml = `<div class="warn-box no-print">💰 Legg inn råvarepriser i bakeriet for å se kostnadsberegning.</div>`;
+    } else {
+      costHtml = `<div class="warn-box no-print">⚠ Ingen av ingrediensene har registrert pris.</div>`;
+    }
+  }
+
   const recipeBakeries = (r.bakeries || []).map(bid => bakeries.find(b => b.id === bid)).filter(Boolean);
   const tagsHtml = recipeBakeries.length > 0
     ? `<div style="margin-bottom:8px">${recipeBakeries.map(b => `<span class="recipe-bakery-tag">🥖 ${b.name}</span>`).join('')}</div>`
@@ -728,6 +953,7 @@ function recipeView() {
     ${tagsHtml}
     ${tabs}${imgs}
     ${bakePctSummaryHtml(pcts, showPct)}
+    ${costHtml}
     ${v.notes?`<div class="info-box">${v.notes}</div>`:''}
     <div class="card"><p style="font-weight:500;margin-bottom:8px">Ingredienser</p>${ingHtml}</div>
     <div class="card"><p style="font-weight:500;margin-bottom:8px">Fremgangsmåte</p><pre>${v.steps || ''}</pre></div>
@@ -975,6 +1201,32 @@ function bindRoles() {
   }
 }
 
+function bindPrices() {
+  const search = document.getElementById('price-search');
+  if (search) {
+    search.addEventListener('input', (e) => {
+      priceSearch = e.target.value;
+      const cursor = e.target.selectionStart;
+      render();
+      const newSearch = document.getElementById('price-search');
+      if (newSearch) {
+        newSearch.focus();
+        newSearch.setSelectionRange(cursor, cursor);
+      }
+    });
+  }
+}
+
+function selectPriceIngredient(navn) {
+  window._newPriceNavn = navn;
+  priceSearch = '';
+  render();
+  setTimeout(() => {
+    const el = document.getElementById('new-price-pris');
+    if (el) el.focus();
+  }, 50);
+}
+
 async function isEmailAllowed(email) {
   if (!email) return false;
   const normalized = email.trim().toLowerCase();
@@ -1013,6 +1265,22 @@ async function loadCustomCategories() {
 async function loadBakeries() {
   const snap = await getDocs(collection(db, 'bakeries'));
   bakeries = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b)=>a.name.localeCompare(b.name,'nb'));
+}
+async function loadBakeryPrices(bakeryId) {
+  bakeryPrices = {};
+  if (!bakeryId) return;
+  const snap = await getDocs(collection(db, 'bakeries', bakeryId, 'prices'));
+  snap.docs.forEach(d => {
+    const data = d.data();
+    if (data.navn) {
+      bakeryPrices[data.navn.toLowerCase()] = {
+        pris: data.pris,
+        pakkemengde: data.pakkemengde,
+        enhet: data.enhet,
+        oppdatert: data.oppdatert,
+      };
+    }
+  });
 }
 async function loadAppSettings() {
   const snap=await getDocs(collection(db,'settings'));
@@ -1099,10 +1367,11 @@ async function deleteBakery(id) {
   render();
 }
 
-function enterBakery(id) {
+async function enterBakery(id) {
   activeBakery = id;
   activeCategory = null;
   view = 'bakery_home';
+  await loadBakeryPrices(id);
   render();
 }
 
@@ -1118,9 +1387,22 @@ function exitBakeryRecipes() {
   render();
 }
 
+function enterBakeryPrices() {
+  priceSearch = '';
+  window._newPriceNavn = '';
+  view = 'bakery_prices';
+  render();
+}
+
+function exitBakeryPrices() {
+  view = 'bakery_home';
+  render();
+}
+
 function exitBakery() {
   activeBakery = null;
   activeCategory = null;
+  bakeryPrices = {};
   view = 'home';
   render();
 }
@@ -1153,6 +1435,50 @@ async function removeRecipeFromBakery(recipeId, bakeryId) {
   await loadRecipes();
   render();
 }
+
+// =====================================================================
+// RÅVAREPRISER
+// =====================================================================
+
+function priceDocId(navn) {
+  return navn.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9æøå_]/g, '');
+}
+
+async function addBakeryPrice() {
+  if (!activeBakery) return;
+  const navn = document.getElementById('new-price-navn').value.trim().toLowerCase();
+  const pris = asNumber(document.getElementById('new-price-pris').value);
+  const pakkemengde = asNumber(document.getElementById('new-price-pakke').value);
+  const enhet = document.getElementById('new-price-enhet').value;
+
+  if (!navn) { setStatus('Velg eller skriv inn ingrediensen.'); return; }
+  if (pris === 0) { setStatus('Skriv inn pris.'); return; }
+  if (pakkemengde === 0) { setStatus('Skriv inn pakkemengde.'); return; }
+
+  const id = priceDocId(navn);
+  await setDoc(doc(db, 'bakeries', activeBakery, 'prices', id), {
+    navn, pris, pakkemengde, enhet,
+    oppdatert: new Date().toISOString()
+  });
+  bakeryPrices[navn] = { pris, pakkemengde, enhet, oppdatert: new Date().toISOString() };
+
+  window._newPriceNavn = '';
+  setStatus(`Pris lagret for ${navn}.`);
+  setTimeout(() => { statusMsg = ''; render(); }, 2000);
+  render();
+}
+
+async function deleteBakeryPrice(navn) {
+  if (!activeBakery) return;
+  const id = priceDocId(navn);
+  await deleteDoc(doc(db, 'bakeries', activeBakery, 'prices', id));
+  delete bakeryPrices[navn];
+  render();
+}
+
+// =====================================================================
+// INGREDIENS-ADMIN
+// =====================================================================
 
 function ingredientRoleId(navn) {
   return navn.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9æøå_]/g, '');
@@ -1230,7 +1556,7 @@ async function handleImageFile(file) {
 }
 
 function setView(v){view=v;statusMsg='';if(v==='roles')roleSearch='';validationErrors={};render();}
-function goHome(){activeCategory=null;activeBakery=null;view='home';render();}
+function goHome(){activeCategory=null;activeBakery=null;bakeryPrices={};view='home';render();}
 function openRecipe(id){selected=id;selectedVersion=0;view='recipe';render();}
 function selVer(i){selectedVersion=i;render();}
 function setStatus(s){statusMsg=s;render();}
@@ -1513,9 +1839,9 @@ onAuthStateChanged(auth, async user => {
       return;
     }
     currentUser = user;
-    loading = true; view = 'home'; statusMsg = 'Henter oppskrifter...'; render();
+    loading = true; view = 'home'; render();
     await Promise.all([loadRecipes(), loadCustomCategories(), loadAppSettings(), loadIngredientRoles(), loadBakeries()]);
-    loading = false; statusMsg = ''; render();
+    loading = false; render();
   } else {
     currentUser = null;
     view = 'login'; loginMode = 'choose';
@@ -1524,7 +1850,7 @@ onAuthStateChanged(auth, async user => {
   }
 });
 
-Object.assign(window,{doGoogleLogin,doEmailLogin,doSignOut,setView,goHome,openRecipe,selVer,setStatus,selectCat,backFromRecipe,cancelEdit,startNew,startEdit,handleSave,confirmDelete,addCustomCat,deleteCustomCat,saveApiKey,createNewUser,addIngredient,removeIngredient,addIngredientRole,deleteIngredientRole,saveAllRoleEdits,addBakery,deleteBakery,enterBakery,exitBakery,enterBakeryRecipes,exitBakeryRecipes,moduleNotReady,addRecipeToSelectedBakery,removeRecipeFromBakery,loginMode});
+Object.assign(window,{doGoogleLogin,doEmailLogin,doSignOut,setView,goHome,openRecipe,selVer,setStatus,selectCat,backFromRecipe,cancelEdit,startNew,startEdit,handleSave,confirmDelete,addCustomCat,deleteCustomCat,saveApiKey,createNewUser,addIngredient,removeIngredient,addIngredientRole,deleteIngredientRole,saveAllRoleEdits,addBakery,deleteBakery,enterBakery,exitBakery,enterBakeryRecipes,exitBakeryRecipes,enterBakeryPrices,exitBakeryPrices,moduleNotReady,addRecipeToSelectedBakery,removeRecipeFromBakery,addBakeryPrice,deleteBakeryPrice,selectPriceIngredient,loginMode});
 Object.defineProperty(window,'loginMode',{get:()=>loginMode,set:v=>loginMode=v});
 </script>
 </body>
