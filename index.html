@@ -89,6 +89,22 @@
   .bakery-checkbox-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
   .bakery-checkbox-row input { width: auto; }
   .recipe-bakery-tag { display: inline-block; font-size: 11px; background: #e8f4ef; color: #1D9E75; padding: 2px 8px; border-radius: 10px; margin-right: 4px; margin-top: 4px; }
+
+  /* Modulmeny i bakeriet */
+  .module-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1.25rem; }
+  .module-btn { border: 0.5px solid #e0e0d8; border-radius: 12px; padding: 18px 14px; background: #fff; cursor: pointer; text-align: left; transition: all 0.15s; width: 100%; display: flex; align-items: center; gap: 12px; }
+  .module-btn:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-color: #1D9E75; }
+  .module-btn .module-icon { font-size: 26px; line-height: 1; }
+  .module-btn .module-name { font-size: 14px; font-weight: 500; }
+
+  /* Kategori-chips inne i bakeri-oppskrifter */
+  .filter-chips { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0 12px; margin-bottom: 4px; -webkit-overflow-scrolling: touch; }
+  .filter-chips::-webkit-scrollbar { display: none; }
+  .chip { flex-shrink: 0; border: 0.5px solid #e0e0d8; border-radius: 16px; padding: 5px 12px; background: #fff; cursor: pointer; font-size: 13px; color: #1a1a1a; white-space: nowrap; }
+  .chip:hover { background: #f0f0e8; }
+  .chip.active { background: #1D9E75; border-color: #1D9E75; color: #fff; }
+  .chip .chip-count { opacity: 0.6; margin-left: 4px; font-size: 11px; }
+
   @media print {
     .no-print { display: none !important; }
     body { background: #fff; }
@@ -302,7 +318,7 @@ function bakePctSummaryHtml(pcts, showBakePct) {
 let currentUser = null;
 let recipes = [];
 let customCategories = [];
-let bakeries = [];           // { id, name, ... }
+let bakeries = [];
 let ingredientRoles = {};
 let coverImageUrl = null;
 let anthropicKey = null;
@@ -313,7 +329,7 @@ let editData = null;
 let loading = false;
 let statusMsg = '';
 let activeCategory = null;
-let activeBakery = null;     // id eller null
+let activeBakery = null;
 let loginMode = 'choose';
 let roleSearch = '';
 let validationErrors = {};
@@ -327,6 +343,7 @@ function render() {
     view === 'bakeries_admin' ? bakeriesAdminView() :
     view === 'bakery_select' ? bakerySelectView() :
     view === 'bakery_home' ? bakeryHomeView() :
+    view === 'bakery_recipes' ? bakeryRecipesView() :
     view === 'edit' ? editView() :
     view === 'recipe' ? recipeView() :
     homeView()
@@ -439,42 +456,78 @@ function bakeryHomeView() {
   if (!b) { view = 'home'; activeBakery = null; return homeView(); }
 
   const bakeryRecipes = recipes.filter(r => Array.isArray(r.bakeries) && r.bakeries.includes(b.id));
-  const catGrid = allCategories().map(c => {
-    const count = bakeryRecipes.filter(r=>r.category===c.id).length;
-    return `<button class="cat-btn ${activeCategory===c.id?'active':''}" onclick="selectCat('${c.id}')">
-      <span class="cat-name">${c.name}</span>
-      <span class="cat-count">${count} oppskrift${count!==1?'er':''}</span>
+
+  const modules = [
+    { id: 'recipes', icon: '🍞', name: 'Oppskrifter', count: bakeryRecipes.length },
+    { id: 'prices', icon: '💰', name: 'Råvarepriser' },
+    { id: 'plan', icon: '📋', name: 'Dagsplan' },
+    { id: 'inventory', icon: '📦', name: 'Lager & bestilling' },
+    { id: 'stats', icon: '📊', name: 'Statistikk' },
+  ];
+
+  const modBtns = modules.map(m => {
+    if (m.id === 'recipes') {
+      return `<button class="module-btn" onclick="enterBakeryRecipes()">
+        <span class="module-icon">${m.icon}</span>
+        <span class="module-name">${m.name}</span>
+      </button>`;
+    }
+    return `<button class="module-btn" onclick="moduleNotReady()">
+      <span class="module-icon">${m.icon}</span>
+      <span class="module-name">${m.name}</span>
     </button>`;
   }).join('');
 
-  const filtered = activeCategory ? bakeryRecipes.filter(r=>r.category===activeCategory) : [];
-  const catLabel = activeCategory ? getCatName(activeCategory) : '';
-
-  const recipeList = activeCategory ? `
-    <button class="btn" style="margin-bottom:12px" onclick="selectCat(null)">← Alle kategorier</button>
-    <h2 style="margin-bottom:12px">${catLabel}</h2>
-    ${filtered.length===0?`<div class="info-box">Ingen oppskrifter i denne kategorien ennå.</div>`:''}
-    ${filtered.map(r=>{
-      const thumb=r.versions.find(v=>v.images&&v.images.length>0)?.images[0]||null;
-      return `<div class="card card-clickable" onclick="openRecipe('${r.id}')" style="display:flex;align-items:center;gap:12px">
-        <div style="flex:1;min-width:0">
-          <p style="font-weight:500">${r.name}</p>
-          <p class="muted">Sist oppdatert ${fmt(r.versions[0].date)}</p>
-        </div>
-        ${thumb?`<img src="${thumb}" style="width:56px;height:56px;border-radius:8px;object-fit:cover;flex-shrink:0">`:''}
-      </div>`;
-    }).join('')}` : '';
-
   return `
-    <div class="topbar no-print"><button class="btn" onclick="exitBakery()">← Hovedside</button>
-    <div class="gap"><button class="btn-primary" onclick="startNew()">+ Ny</button></div></div>
+    <div class="topbar no-print"><button class="btn" onclick="exitBakery()">← Hovedside</button></div>
     <p class="muted" style="margin-bottom:4px">Bakeri</p>
     <h1 style="margin-bottom:1.25rem">${b.name}</h1>
-    ${bakeryRecipes.length === 0 ? `<div class="info-box">Ingen oppskrifter er knyttet til dette bakeriet ennå. Åpne en oppskrift og legg den til, eller huk av for bakeriet når du redigerer/oppretter.</div>` : ''}
-    ${!activeCategory ? `
-      <div class="info-box" style="background:#e8f4ef;color:#1D9E75">Snart kommer: skalering av oppskrifter, dagsplan, oppgaveliste og kostnadsberegning.</div>
-      <div class="categories">${catGrid}</div>
-    ` : recipeList}`;
+    ${statusMsg?`<p class="status">${statusMsg}</p>`:''}
+    <div class="module-grid">${modBtns}</div>`;
+}
+
+function bakeryRecipesView() {
+  const b = bakeries.find(x => x.id === activeBakery);
+  if (!b) { view = 'home'; activeBakery = null; return homeView(); }
+
+  const bakeryRecipes = recipes.filter(r => Array.isArray(r.bakeries) && r.bakeries.includes(b.id));
+
+  // Bygg chips kun for kategorier som faktisk har oppskrifter
+  const usedCategoryIds = [...new Set(bakeryRecipes.map(r => r.category))];
+  const usedCategories = allCategories().filter(c => usedCategoryIds.includes(c.id));
+
+  const chips = `
+    <div class="filter-chips">
+      <button class="chip ${!activeCategory?'active':''}" onclick="selectCat(null)">Alle <span class="chip-count">${bakeryRecipes.length}</span></button>
+      ${usedCategories.map(c => {
+        const count = bakeryRecipes.filter(r=>r.category===c.id).length;
+        return `<button class="chip ${activeCategory===c.id?'active':''}" onclick="selectCat('${c.id}')">${c.name} <span class="chip-count">${count}</span></button>`;
+      }).join('')}
+    </div>`;
+
+  const filtered = activeCategory ? bakeryRecipes.filter(r=>r.category===activeCategory) : bakeryRecipes;
+
+  const recipeList = filtered.length === 0
+    ? `<div class="info-box">Ingen oppskrifter ${activeCategory?'i denne kategorien':'er knyttet til bakeriet'} ennå.</div>`
+    : filtered.map(r=>{
+        const thumb=r.versions.find(v=>v.images&&v.images.length>0)?.images[0]||null;
+        const catName = getCatName(r.category);
+        return `<div class="card card-clickable" onclick="openRecipe('${r.id}')" style="display:flex;align-items:center;gap:12px">
+          <div style="flex:1;min-width:0">
+            <p style="font-weight:500">${r.name}</p>
+            <p class="muted">${catName} · sist oppdatert ${fmt(r.versions[0].date)}</p>
+          </div>
+          ${thumb?`<img src="${thumb}" style="width:56px;height:56px;border-radius:8px;object-fit:cover;flex-shrink:0">`:''}
+        </div>`;
+      }).join('');
+
+  return `
+    <div class="topbar no-print"><button class="btn" onclick="exitBakeryRecipes()">← Bakeri</button>
+    <div class="gap"><button class="btn-primary" onclick="startNew()">+ Ny</button></div></div>
+    <p class="muted" style="margin-bottom:4px">${b.name}</p>
+    <h2 style="margin-bottom:8px">Oppskrifter</h2>
+    ${bakeryRecipes.length > 0 ? chips : ''}
+    ${recipeList}`;
 }
 
 function settingsView() {
@@ -638,13 +691,11 @@ function recipeView() {
         return `<div class="ing-list-item"><span>${main}${merknad}</span>${pctStr}</div>`;
       }).join('');
 
-  // Bakeri-tagger
   const recipeBakeries = (r.bakeries || []).map(bid => bakeries.find(b => b.id === bid)).filter(Boolean);
   const tagsHtml = recipeBakeries.length > 0
     ? `<div style="margin-bottom:8px">${recipeBakeries.map(b => `<span class="recipe-bakery-tag">🥖 ${b.name}</span>`).join('')}</div>`
     : '';
 
-  // Bakeri-handlinger (vis hvis ikke alle bakerier allerede er valgt)
   const remainingBakeries = bakeries.filter(b => !recipeBakeries.find(rb => rb.id === b.id));
   const bakeryActionsHtml = bakeries.length === 0 ? '' : `
     <div class="card no-print">
@@ -717,7 +768,6 @@ function editView() {
   const ingRowsHtml = ingList.map((ing, i) => ingredientRowHtml(ing, i, melTotal, showPct)).join('');
   const summaryHtml = bakePctSummaryHtml(pcts, showPct);
 
-  // Bakeri-checkboxer
   const recipeBakeries = editData.bakeries || [];
   const bakeryCheckboxes = bakeries.length === 0 ? '' : `
     <div class="card">
@@ -732,7 +782,7 @@ function editView() {
     </div>`;
 
   return `
-    <div class="topbar"><button class="btn" onclick="setView('home')">← Avbryt</button></div>
+    <div class="topbar"><button class="btn" onclick="cancelEdit()">← Avbryt</button></div>
     <h2>${editData.name||'Ny oppskrift'}</h2>
     <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Scan oppskrift fra bilde</p>
@@ -1018,10 +1068,6 @@ async function deleteCustomCat(id) {
   render();
 }
 
-// =====================================================================
-// BAKERIER
-// =====================================================================
-
 function bakeryId(name) {
   return 'bakery_' + name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9æøå_]/g, '') + '_' + Date.now();
 }
@@ -1041,17 +1087,12 @@ async function deleteBakery(id) {
   const b = bakeries.find(x => x.id === id);
   if (!b) return;
   if (!confirm(`Slette "${b.name}"? Oppskrifter mister bare taggen, ikke selve oppskriftene.`)) return;
-
-  // Slett bakeriet
   await deleteDoc(doc(db, 'bakeries', id));
-
-  // Fjern bakeriet fra alle oppskrifter som har det som tag
   const affected = recipes.filter(r => Array.isArray(r.bakeries) && r.bakeries.includes(id));
   for (const r of affected) {
     const updated = { ...r, bakeries: r.bakeries.filter(bid => bid !== id) };
     await setDoc(doc(db, 'recipes', r.id), updated);
   }
-
   await Promise.all([loadBakeries(), loadRecipes()]);
   setStatus(`"${b.name}" slettet.`);
   setTimeout(() => { statusMsg = ''; render(); }, 2000);
@@ -1065,11 +1106,28 @@ function enterBakery(id) {
   render();
 }
 
+function enterBakeryRecipes() {
+  activeCategory = null;
+  view = 'bakery_recipes';
+  render();
+}
+
+function exitBakeryRecipes() {
+  activeCategory = null;
+  view = 'bakery_home';
+  render();
+}
+
 function exitBakery() {
   activeBakery = null;
   activeCategory = null;
   view = 'home';
   render();
+}
+
+function moduleNotReady() {
+  setStatus('Denne modulen er under utvikling.');
+  setTimeout(() => { statusMsg = ''; render(); }, 2500);
 }
 
 async function addRecipeToSelectedBakery(recipeId) {
@@ -1095,10 +1153,6 @@ async function removeRecipeFromBakery(recipeId, bakeryId) {
   await loadRecipes();
   render();
 }
-
-// =====================================================================
-// INGREDIENS-ADMIN
-// =====================================================================
 
 function ingredientRoleId(navn) {
   return navn.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9æøå_]/g, '');
@@ -1161,10 +1215,6 @@ async function saveAllRoleEdits() {
   setTimeout(() => { statusMsg = ''; render(); }, 2500);
 }
 
-// =====================================================================
-// STORAGE
-// =====================================================================
-
 async function uploadFile(file, path) {
   const storageRef=ref(storage,path);
   await uploadBytes(storageRef,file);
@@ -1179,19 +1229,23 @@ async function handleImageFile(file) {
   setStatus(''); render();
 }
 
-// =====================================================================
-// VIEWS / NAVIGATION
-// =====================================================================
-
 function setView(v){view=v;statusMsg='';if(v==='roles')roleSearch='';validationErrors={};render();}
 function goHome(){activeCategory=null;activeBakery=null;view='home';render();}
 function openRecipe(id){selected=id;selectedVersion=0;view='recipe';render();}
 function selVer(i){selectedVersion=i;render();}
 function setStatus(s){statusMsg=s;render();}
 function selectCat(id){activeCategory=id;render();}
+
 function backFromRecipe(){
-  if (activeBakery) { view = 'bakery_home'; render(); }
+  if (activeBakery) { view = 'bakery_recipes'; render(); }
   else { view='home'; render(); }
+}
+
+function cancelEdit() {
+  if (activeBakery) { view = 'bakery_recipes'; }
+  else { view = 'home'; }
+  editData = null;
+  render();
 }
 
 function emptyIngredient() {
@@ -1200,7 +1254,6 @@ function emptyIngredient() {
 
 function startNew() {
   validationErrors = {};
-  // Hvis vi står inne i et bakeri, knytter vi automatisk oppskriften til det
   const initialBakeries = activeBakery ? [activeBakery] : [];
   editData={
     id:`recipe_${Date.now()}`,
@@ -1253,7 +1306,6 @@ function saveFormState() {
   if(s)editData.versions[0].steps=s.value;
   if(nt)editData.versions[0].notes=nt.value;
 
-  // Hent bakeri-checkboxer
   const checkedBakeries = [];
   bakeries.forEach(b => {
     const cb = document.getElementById('bk-' + b.id);
@@ -1301,8 +1353,7 @@ async function handleSave() {
   loading=true;setStatus('Lagrer...');
   await saveRecipeToDb(editData);
   loading=false;
-  // Hvis vi var inne i et bakeri når vi opprettet, gå tilbake dit
-  if (activeBakery) { view='bakery_home'; }
+  if (activeBakery) { view='bakery_recipes'; }
   else { view='home'; }
   editData=null;validationErrors={};render();
 }
@@ -1310,7 +1361,7 @@ async function confirmDelete() {
   const r=recipes.find(x=>x.id===selected);
   if(!r||!confirm(`Vil du slette "${r.name}"?`)) return;
   await deleteRecipeFromDb(r.id);
-  if (activeBakery) { view='bakery_home'; }
+  if (activeBakery) { view='bakery_recipes'; }
   else { view='home'; }
   render();
 }
@@ -1473,7 +1524,7 @@ onAuthStateChanged(auth, async user => {
   }
 });
 
-Object.assign(window,{doGoogleLogin,doEmailLogin,doSignOut,setView,goHome,openRecipe,selVer,setStatus,selectCat,backFromRecipe,startNew,startEdit,handleSave,confirmDelete,addCustomCat,deleteCustomCat,saveApiKey,createNewUser,addIngredient,removeIngredient,addIngredientRole,deleteIngredientRole,saveAllRoleEdits,addBakery,deleteBakery,enterBakery,exitBakery,addRecipeToSelectedBakery,removeRecipeFromBakery,loginMode});
+Object.assign(window,{doGoogleLogin,doEmailLogin,doSignOut,setView,goHome,openRecipe,selVer,setStatus,selectCat,backFromRecipe,cancelEdit,startNew,startEdit,handleSave,confirmDelete,addCustomCat,deleteCustomCat,saveApiKey,createNewUser,addIngredient,removeIngredient,addIngredientRole,deleteIngredientRole,saveAllRoleEdits,addBakery,deleteBakery,enterBakery,exitBakery,enterBakeryRecipes,exitBakeryRecipes,moduleNotReady,addRecipeToSelectedBakery,removeRecipeFromBakery,loginMode});
 Object.defineProperty(window,'loginMode',{get:()=>loginMode,set:v=>loginMode=v});
 </script>
 </body>
