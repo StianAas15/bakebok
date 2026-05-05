@@ -1005,7 +1005,7 @@ function recipeView() {
     : '';
 
   const remainingBakeries = bakeries.filter(b => !recipeBakeries.find(rb => rb.id === b.id));
-  const bakeryActionsHtml = bakeries.length === 0 ? '' : `
+  const bakeryActionsHtml = activeBakery || bakeries.length === 0 ? '' : `
     <div class="card no-print">
       <p style="font-weight:500;margin-bottom:8px">Bakerier</p>
       ${recipeBakeries.length > 0 ? recipeBakeries.map(b => `
