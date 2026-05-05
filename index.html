@@ -205,6 +205,20 @@ function allCategories() { return [...DEFAULT_CATEGORIES, ...customCategories]; 
 function getCatName(id) { return allCategories().find(c=>c.id===id)?.name || id; }
 function fmt(iso) { return new Date(iso).toLocaleDateString('nb-NO',{day:'2-digit',month:'short',year:'numeric'}); }
 
+function fmtDateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('nb-NO', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  }) + ' kl. ' + d.toLocaleTimeString('nb-NO', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+ 
 function lookupRole(navn) {
   if (!navn) return '';
   const key = navn.trim().toLowerCase();
@@ -481,6 +495,7 @@ let activeBakery = null;
 let loginMode = 'choose';
 let roleSearch = '';
 let priceSearch = '';
+let priceListSearch = '';
 let editingPriceName = null;
 let validationErrors = {};
 
@@ -678,11 +693,15 @@ function bakeryPricesView() {
   const b = bakeries.find(x => x.id === activeBakery);
   if (!b) { view = 'home'; activeBakery = null; return homeView(); }
 
-  const search = (priceSearch || '').toLowerCase();
+ const search = (priceSearch || '').toLowerCase();
+const listSearch = (priceListSearch || '').toLowerCase();
 
-  // Liste over priser jeg allerede har
-  const priceEntries = Object.entries(bakeryPrices)
-    .sort((a, b) => a[0].localeCompare(b[0], 'nb'));
+// Liste over priser jeg allerede har
+const allPriceEntries = Object.entries(bakeryPrices)
+  .sort((a, b) => a[0].localeCompare(b[0], 'nb'));
+
+const priceEntries = allPriceEntries
+  .filter(([navn]) => !listSearch || navn.includes(listSearch));
 
 const priceList = priceEntries.length === 0
   ? `<p class="muted" style="margin-bottom:8px">Ingen råvarepriser registrert ennå. Bruk søkefeltet under for å legge til.</p>`
@@ -708,7 +727,8 @@ const priceList = priceEntries.length === 0
           <div class="price-row editing">
             <div>
               <div class="price-name">${navn}</div>
-              <div class="price-info">Endre pris, pakkemengde eller enhet</div>
+              <div class="price-info">Endre pris, pakkemengde eller enhet</div> 
+              ${data.oppdatert ? `<div class="price-info">Sist oppdatert ${fmtDateTime(data.oppdatert)}</div>` : ''}
 
               <div class="price-edit-grid">
                 <input type="text" id="edit-price-pris-${rowId}" value="${data.pris}" placeholder="kr">
@@ -728,7 +748,8 @@ const priceList = priceEntries.length === 0
         <div class="price-row">
           <div>
             <div class="price-name">${navn}</div>
-            <div class="price-info">${data.pris} kr / ${data.pakkemengde} ${data.enhet}</div>
+            <div class="price-info">${data.pris} kr / ${data.pakkemengde} ${data.enhet}</div> 
+            ${data.oppdatert ? `<div class="price-info">Sist oppdatert ${fmtDateTime(data.oppdatert)}</div>` : ''}
           </div>
           <div>
             <div class="price-amount">${perUnit}</div>
@@ -786,9 +807,18 @@ const priceList = priceEntries.length === 0
     </div>
 
     <div class="card">
-      <p style="font-weight:500;margin-bottom:10px">Mine priser (${priceEntries.length})</p>
-      ${priceList}
-    </div>
+  <p style="font-weight:500;margin-bottom:10px">Mine priser (${priceEntries.length} av ${allPriceEntries.length})</p>
+
+  <input
+    type="text"
+    id="price-list-search"
+    placeholder="Søk i mine priser..."
+    value="${priceListSearch || ''}"
+    style="margin-bottom:10px"
+  >
+
+  ${priceList}
+</div>
     ${statusMsg?`<p class="status">${statusMsg}</p>`:''}`;
 }
 
@@ -1271,6 +1301,20 @@ function bindPrices() {
       }
     });
   }
+
+  const listSearch = document.getElementById('price-list-search');
+  if (listSearch) {
+    listSearch.addEventListener('input', (e) => {
+      priceListSearch = e.target.value;
+      const cursor = e.target.selectionStart;
+      render();
+      const newListSearch = document.getElementById('price-list-search');
+      if (newListSearch) {
+        newListSearch.focus();
+        newListSearch.setSelectionRange(cursor, cursor);
+      }
+    });
+  }
 }
 
 function selectPriceIngredient(navn) {
@@ -1445,6 +1489,7 @@ function exitBakeryRecipes() {
 
 function enterBakeryPrices() {
   priceSearch = '';
+  priceListSearch = '';
   editingPriceName = null;
   window._newPriceNavn = '';
   view = 'bakery_prices';
@@ -1452,8 +1497,10 @@ function enterBakeryPrices() {
 }
 
 function exitBakeryPrices() {
-editingPriceName = null;
- view = 'bakery_home';
+  priceSearch = '';
+  priceListSearch = '';
+  editingPriceName = null;
+  view = 'bakery_home';
   render();
 }
 
@@ -1540,7 +1587,9 @@ async function addBakeryPrice() {
   bakeryPrices[navn] = { pris, pakkemengde, enhet, oppdatert: new Date().toISOString() };
 
   window._newPriceNavn = '';
-  setStatus(`Pris lagret for ${navn}.`);
+priceSearch = '';
+priceListSearch = navn;
+setStatus(`Pris lagret for ${navn}.`);
   setTimeout(() => { statusMsg = ''; render(); }, 2000);
   render();
 }
