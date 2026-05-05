@@ -103,7 +103,11 @@
   .chip .chip-count { opacity: 0.6; margin-left: 4px; font-size: 11px; }
 
   /* Råvarepriser */
-  .price-row { display: grid; grid-template-columns: 1fr 140px 30px; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 0.5px solid #f0f0e8; }
+.price-row { display: grid; grid-template-columns: 1fr 140px 90px; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 0.5px solid #f0f0e8; }
+.price-row.editing { grid-template-columns: 1fr; align-items: stretch; }
+.price-actions { display: flex; justify-content: flex-end; gap: 4px; }
+.price-edit-grid { display: grid; grid-template-columns: 80px 1fr 70px; gap: 6px; align-items: center; margin-top: 8px; }
+.price-edit-buttons { display: flex; gap: 8px; margin-top: 8px; }
   .price-row:last-child { border-bottom: none; }
   .price-row .price-name { font-size: 14px; font-weight: 500; }
   .price-row .price-info { font-size: 12px; color: #666; margin-top: 2px; }
@@ -459,6 +463,7 @@ let activeBakery = null;
 let loginMode = 'choose';
 let roleSearch = '';
 let priceSearch = '';
+let editingPriceName = null;
 let validationErrors = {};
 
 function render() {
@@ -661,28 +666,61 @@ function bakeryPricesView() {
   const priceEntries = Object.entries(bakeryPrices)
     .sort((a, b) => a[0].localeCompare(b[0], 'nb'));
 
-  const priceList = priceEntries.length === 0
-    ? `<p class="muted" style="margin-bottom:8px">Ingen råvarepriser registrert ennå. Bruk søkefeltet under for å legge til.</p>`
-    : priceEntries.map(([navn, data]) => {
-        const ppg = pricePerGram(data);
-        let perUnit = '';
-        if (ppg) {
-          if (ppg.type === 'vekt') perUnit = `${(ppg.krPerGram * 1000).toFixed(2).replace('.', ',')} kr/kg`;
-          else if (ppg.type === 'volum') perUnit = `${(ppg.krPerMl * 1000).toFixed(2).replace('.', ',')} kr/l`;
-          else if (ppg.type === 'stk') perUnit = `${ppg.krPerStk.toFixed(2).replace('.', ',')} kr/stk`;
-        }
+const priceList = priceEntries.length === 0
+  ? `<p class="muted" style="margin-bottom:8px">Ingen råvarepriser registrert ennå. Bruk søkefeltet under for å legge til.</p>`
+  : priceEntries.map(([navn, data]) => {
+      const safeName = navn.replace(/'/g, "\\'");
+      const ppg = pricePerGram(data);
+      let perUnit = '';
+
+      if (ppg) {
+        if (ppg.type === 'vekt') perUnit = `${(ppg.krPerGram * 1000).toFixed(2).replace('.', ',')} kr/kg`;
+        else if (ppg.type === 'volum') perUnit = `${(ppg.krPerMl * 1000).toFixed(2).replace('.', ',')} kr/l`;
+        else if (ppg.type === 'stk') perUnit = `${ppg.krPerStk.toFixed(2).replace('.', ',')} kr/stk`;
+      }
+
+      if (editingPriceName === navn) {
+        const unitOptsEdit = PRICE_UNITS.map(u =>
+          `<option value="${u}" ${u === data.enhet ? 'selected' : ''}>${u}</option>`
+        ).join('');
+
+        const rowId = priceDocId(navn);
+
         return `
-          <div class="price-row">
+          <div class="price-row editing">
             <div>
               <div class="price-name">${navn}</div>
-              <div class="price-info">${data.pris} kr / ${data.pakkemengde} ${data.enhet}</div>
+              <div class="price-info">Endre pris, pakkemengde eller enhet</div>
+
+              <div class="price-edit-grid">
+                <input type="text" id="edit-price-pris-${rowId}" value="${data.pris}" placeholder="kr">
+                <input type="text" id="edit-price-pakke-${rowId}" value="${data.pakkemengde}" placeholder="Pakkemengde">
+                <select id="edit-price-enhet-${rowId}">${unitOptsEdit}</select>
+              </div>
+
+              <div class="price-edit-buttons">
+                <button class="btn-primary" onclick="saveBakeryPriceEdit('${safeName}')">Lagre</button>
+                <button class="btn" onclick="cancelEditBakeryPrice()">Avbryt</button>
+              </div>
             </div>
-            <div>
-              <div class="price-amount">${perUnit}</div>
-            </div>
-            <button class="price-remove" onclick="deleteBakeryPrice('${navn}')" title="Slett">×</button>
           </div>`;
-      }).join('');
+      }
+
+      return `
+        <div class="price-row">
+          <div>
+            <div class="price-name">${navn}</div>
+            <div class="price-info">${data.pris} kr / ${data.pakkemengde} ${data.enhet}</div>
+          </div>
+          <div>
+            <div class="price-amount">${perUnit}</div>
+          </div>
+          <div class="price-actions">
+            <button class="btn" style="padding:4px 8px;font-size:12px" onclick="editBakeryPrice('${safeName}')">Endre</button>
+            <button class="price-remove" onclick="deleteBakeryPrice('${safeName}')" title="Slett">×</button>
+          </div>
+        </div>`;
+    }).join('');
 
   // Søkeforslag fra ingredienslista – kun de som IKKE allerede har pris
   let suggestionsHtml = '';
@@ -1475,7 +1513,68 @@ async function deleteBakeryPrice(navn) {
   delete bakeryPrices[navn];
   render();
 }
+function editBakeryPrice(navn) {
+  editingPriceName = navn;
+  statusMsg = '';
+  render();
+}
 
+function cancelEditBakeryPrice() {
+  editingPriceName = null;
+  statusMsg = '';
+  render();
+}
+
+async function saveBakeryPriceEdit(navn) {
+  if (!activeBakery) return;
+
+  const rowId = priceDocId(navn);
+  const pris = asNumber(document.getElementById(`edit-price-pris-${rowId}`)?.value);
+  const pakkemengde = asNumber(document.getElementById(`edit-price-pakke-${rowId}`)?.value);
+  const enhet = document.getElementById(`edit-price-enhet-${rowId}`)?.value;
+
+  if (pris === 0) {
+    setStatus('Skriv inn pris.');
+    return;
+  }
+
+  if (pakkemengde === 0) {
+    setStatus('Skriv inn pakkemengde.');
+    return;
+  }
+
+  if (!enhet) {
+    setStatus('Velg enhet.');
+    return;
+  }
+
+  const id = priceDocId(navn);
+  const updated = {
+    navn,
+    pris,
+    pakkemengde,
+    enhet,
+    oppdatert: new Date().toISOString()
+  };
+
+  await setDoc(doc(db, 'bakeries', activeBakery, 'prices', id), updated);
+
+  bakeryPrices[navn] = {
+    pris,
+    pakkemengde,
+    enhet,
+    oppdatert: updated.oppdatert
+  };
+
+  editingPriceName = null;
+  setStatus(`Pris oppdatert for ${navn}.`);
+  setTimeout(() => {
+    statusMsg = '';
+    render();
+  }, 2000);
+  render();
+}
+ 
 // =====================================================================
 // INGREDIENS-ADMIN
 // =====================================================================
@@ -1850,7 +1949,51 @@ onAuthStateChanged(auth, async user => {
   }
 });
 
-Object.assign(window,{doGoogleLogin,doEmailLogin,doSignOut,setView,goHome,openRecipe,selVer,setStatus,selectCat,backFromRecipe,cancelEdit,startNew,startEdit,handleSave,confirmDelete,addCustomCat,deleteCustomCat,saveApiKey,createNewUser,addIngredient,removeIngredient,addIngredientRole,deleteIngredientRole,saveAllRoleEdits,addBakery,deleteBakery,enterBakery,exitBakery,enterBakeryRecipes,exitBakeryRecipes,enterBakeryPrices,exitBakeryPrices,moduleNotReady,addRecipeToSelectedBakery,removeRecipeFromBakery,addBakeryPrice,deleteBakeryPrice,selectPriceIngredient,loginMode});
+
+ Object.assign(window,{
+  doGoogleLogin,
+  doEmailLogin,
+  doSignOut,
+  setView,
+  goHome,
+  openRecipe,
+  selVer,
+  setStatus,
+  selectCat,
+  backFromRecipe,
+  cancelEdit,
+  startNew,
+  startEdit,
+  handleSave,
+  confirmDelete,
+  addCustomCat,
+  deleteCustomCat,
+  saveApiKey,
+  createNewUser,
+  addIngredient,
+  removeIngredient,
+  addIngredientRole,
+  deleteIngredientRole,
+  saveAllRoleEdits,
+  addBakery,
+  deleteBakery,
+  enterBakery,
+  exitBakery,
+  enterBakeryRecipes,
+  exitBakeryRecipes,
+  enterBakeryPrices,
+  exitBakeryPrices,
+  moduleNotReady,
+  addRecipeToSelectedBakery,
+  removeRecipeFromBakery,
+  addBakeryPrice,
+  deleteBakeryPrice,
+  editBakeryPrice,
+  cancelEditBakeryPrice,
+  saveBakeryPriceEdit,
+  selectPriceIngredient,
+  loginMode
+});
 Object.defineProperty(window,'loginMode',{get:()=>loginMode,set:v=>loginMode=v});
 </script>
 </body>
