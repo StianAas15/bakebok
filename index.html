@@ -1427,13 +1427,15 @@ function exitBakeryRecipes() {
 
 function enterBakeryPrices() {
   priceSearch = '';
+  editingPriceName = null;
   window._newPriceNavn = '';
   view = 'bakery_prices';
   render();
 }
 
 function exitBakeryPrices() {
-  view = 'bakery_home';
+editingPriceName = null;
+ view = 'bakery_home';
   render();
 }
 
@@ -1950,7 +1952,7 @@ onAuthStateChanged(auth, async user => {
 });
 
 
- Object.assign(window,{
+Object.assign(window,{
   doGoogleLogin,
   doEmailLogin,
   doSignOut,
