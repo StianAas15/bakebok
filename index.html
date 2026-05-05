@@ -231,7 +231,12 @@ function asNumber(x) {
   const n = parseFloat(String(x).replace(',', '.'));
   return isNaN(n) ? 0 : n;
 }
-
+function hasNumberValue(x) {
+  if (x === null || x === undefined) return false;
+  if (typeof x === 'number') return !isNaN(x);
+  return String(x).trim() !== '' && !isNaN(parseFloat(String(x).replace(',', '.')));
+}
+ 
 function tilGram(ing) {
   const mengde = asNumber(ing.mengde);
   if (mengde === 0) return null;
@@ -341,7 +346,7 @@ function pricePerGram(prisData) {
   const pris = asNumber(prisData.pris);
   const pakkemengde = asNumber(prisData.pakkemengde);
   const enhet = (prisData.enhet || '').trim().toLowerCase();
-  if (pris === 0 || pakkemengde === 0) return null;
+  if (pakkemengde === 0) return null;
 
   // Vekt
   if (WEIGHT_TO_G[enhet] !== undefined) {
@@ -1486,14 +1491,16 @@ function priceDocId(navn) {
 
 async function addBakeryPrice() {
   if (!activeBakery) return;
-  const navn = document.getElementById('new-price-navn').value.trim().toLowerCase();
-  const pris = asNumber(document.getElementById('new-price-pris').value);
-  const pakkemengde = asNumber(document.getElementById('new-price-pakke').value);
-  const enhet = document.getElementById('new-price-enhet').value;
+const navn = document.getElementById('new-price-navn').value.trim().toLowerCase();
+const prisInput = document.getElementById('new-price-pris').value;
+const pakkeInput = document.getElementById('new-price-pakke').value;
+const pris = asNumber(prisInput);
+const pakkemengde = asNumber(pakkeInput);
+const enhet = document.getElementById('new-price-enhet').value;
 
-  if (!navn) { setStatus('Velg eller skriv inn ingrediensen.'); return; }
-  if (pris === 0) { setStatus('Skriv inn pris.'); return; }
-  if (pakkemengde === 0) { setStatus('Skriv inn pakkemengde.'); return; }
+if (!navn) { setStatus('Velg eller skriv inn ingrediensen.'); return; }
+if (!hasNumberValue(prisInput)) { setStatus('Skriv inn pris.'); return; }
+if (!hasNumberValue(pakkeInput) || pakkemengde === 0) { setStatus('Skriv inn pakkemengde.'); return; }
 
   const id = priceDocId(navn);
   await setDoc(doc(db, 'bakeries', activeBakery, 'prices', id), {
@@ -1531,19 +1538,21 @@ async function saveBakeryPriceEdit(navn) {
   if (!activeBakery) return;
 
   const rowId = priceDocId(navn);
-  const pris = asNumber(document.getElementById(`edit-price-pris-${rowId}`)?.value);
-  const pakkemengde = asNumber(document.getElementById(`edit-price-pakke-${rowId}`)?.value);
-  const enhet = document.getElementById(`edit-price-enhet-${rowId}`)?.value;
+const prisInput = document.getElementById(`edit-price-pris-${rowId}`)?.value;
+const pakkeInput = document.getElementById(`edit-price-pakke-${rowId}`)?.value;
+const pris = asNumber(prisInput);
+const pakkemengde = asNumber(pakkeInput);
+const enhet = document.getElementById(`edit-price-enhet-${rowId}`)?.value;
 
-  if (pris === 0) {
-    setStatus('Skriv inn pris.');
-    return;
-  }
+if (!hasNumberValue(prisInput)) {
+  setStatus('Skriv inn pris.');
+  return;
+}
 
-  if (pakkemengde === 0) {
-    setStatus('Skriv inn pakkemengde.');
-    return;
-  }
+if (!hasNumberValue(pakkeInput) || pakkemengde === 0) {
+  setStatus('Skriv inn pakkemengde.');
+  return;
+}
 
   if (!enhet) {
     setStatus('Velg enhet.');
