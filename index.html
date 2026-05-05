@@ -1513,9 +1513,9 @@ onAuthStateChanged(auth, async user => {
       return;
     }
     currentUser = user;
-    loading = true; view = 'home'; render();
+    loading = true; view = 'home'; statusMsg = 'Henter oppskrifter...'; render();
     await Promise.all([loadRecipes(), loadCustomCategories(), loadAppSettings(), loadIngredientRoles(), loadBakeries()]);
-    loading = false; render();
+    loading = false; statusMsg = ''; render();
   } else {
     currentUser = null;
     view = 'login'; loginMode = 'choose';
