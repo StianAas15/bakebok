@@ -236,6 +236,12 @@ function hasNumberValue(x) {
   if (typeof x === 'number') return !isNaN(x);
   return String(x).trim() !== '' && !isNaN(parseFloat(String(x).replace(',', '.')));
 }
+
+ function hasNumberValue(x) {
+  if (x === null || x === undefined) return false;
+  if (typeof x === 'number') return !isNaN(x);
+  return String(x).trim() !== '' && !isNaN(parseFloat(String(x).replace(',', '.')));
+}
  
 function tilGram(ing) {
   const mengde = asNumber(ing.mengde);
@@ -343,9 +349,13 @@ function bakePctSummaryHtml(pcts, showBakePct) {
 // Konverter prisens enhet til kr per gram (eller per stk for stk-prisede)
 function pricePerGram(prisData) {
   if (!prisData) return null;
+
   const pris = asNumber(prisData.pris);
   const pakkemengde = asNumber(prisData.pakkemengde);
   const enhet = (prisData.enhet || '').trim().toLowerCase();
+
+  // Pris kan være 0, for eksempel vann.
+  // Pakkemengde må derimot være større enn 0.
   if (pakkemengde === 0) return null;
 
   // Vekt
@@ -353,15 +363,18 @@ function pricePerGram(prisData) {
     const totalGram = pakkemengde * WEIGHT_TO_G[enhet];
     return { krPerGram: pris / totalGram, type: 'vekt' };
   }
-  // Volum (krever tetthet for å regne om til gram)
+
+  // Volum
   if (VOLUME_TO_ML[enhet] !== undefined) {
     const totalMl = pakkemengde * VOLUME_TO_ML[enhet];
     return { krPerMl: pris / totalMl, type: 'volum' };
   }
+
   // Stk eller pakke
   if (enhet === 'stk' || enhet === 'pakke') {
     return { krPerStk: pris / pakkemengde, type: 'stk' };
   }
+
   return null;
 }
 
@@ -1491,16 +1504,33 @@ function priceDocId(navn) {
 
 async function addBakeryPrice() {
   if (!activeBakery) return;
-const navn = document.getElementById('new-price-navn').value.trim().toLowerCase();
-const prisInput = document.getElementById('new-price-pris').value;
-const pakkeInput = document.getElementById('new-price-pakke').value;
-const pris = asNumber(prisInput);
-const pakkemengde = asNumber(pakkeInput);
-const enhet = document.getElementById('new-price-enhet').value;
 
-if (!navn) { setStatus('Velg eller skriv inn ingrediensen.'); return; }
-if (!hasNumberValue(prisInput)) { setStatus('Skriv inn pris.'); return; }
-if (!hasNumberValue(pakkeInput) || pakkemengde === 0) { setStatus('Skriv inn pakkemengde.'); return; }
+  const navn = document.getElementById('new-price-navn').value.trim().toLowerCase();
+  const prisInput = document.getElementById('new-price-pris').value;
+  const pakkeInput = document.getElementById('new-price-pakke').value;
+  const pris = asNumber(prisInput);
+  const pakkemengde = asNumber(pakkeInput);
+  const enhet = document.getElementById('new-price-enhet').value;
+
+  if (!navn) {
+    setStatus('Velg eller skriv inn ingrediensen.');
+    return;
+  }
+
+  if (!hasNumberValue(prisInput)) {
+    setStatus('Skriv inn pris. Bruk 0 hvis råvaren skal ha gratispris.');
+    return;
+  }
+
+  if (!hasNumberValue(pakkeInput)) {
+    setStatus('Skriv inn pakkemengde, for eksempel 1 l, 1 kg eller 25 kg.');
+    return;
+  }
+
+  if (pakkemengde === 0) {
+    setStatus('Pakkemengde kan ikke være 0.');
+    return;
+  }
 
   const id = priceDocId(navn);
   await setDoc(doc(db, 'bakeries', activeBakery, 'prices', id), {
@@ -1538,21 +1568,26 @@ async function saveBakeryPriceEdit(navn) {
   if (!activeBakery) return;
 
   const rowId = priceDocId(navn);
-const prisInput = document.getElementById(`edit-price-pris-${rowId}`)?.value;
-const pakkeInput = document.getElementById(`edit-price-pakke-${rowId}`)?.value;
-const pris = asNumber(prisInput);
-const pakkemengde = asNumber(pakkeInput);
-const enhet = document.getElementById(`edit-price-enhet-${rowId}`)?.value;
+  const prisInput = document.getElementById(`edit-price-pris-${rowId}`)?.value;
+  const pakkeInput = document.getElementById(`edit-price-pakke-${rowId}`)?.value;
+  const pris = asNumber(prisInput);
+  const pakkemengde = asNumber(pakkeInput);
+  const enhet = document.getElementById(`edit-price-enhet-${rowId}`)?.value;
 
-if (!hasNumberValue(prisInput)) {
-  setStatus('Skriv inn pris.');
-  return;
-}
+  if (!hasNumberValue(prisInput)) {
+    setStatus('Skriv inn pris. Bruk 0 hvis råvaren skal ha gratispris.');
+    return;
+  }
 
-if (!hasNumberValue(pakkeInput) || pakkemengde === 0) {
-  setStatus('Skriv inn pakkemengde.');
-  return;
-}
+  if (!hasNumberValue(pakkeInput)) {
+    setStatus('Skriv inn pakkemengde, for eksempel 1 l, 1 kg eller 25 kg.');
+    return;
+  }
+
+  if (pakkemengde === 0) {
+    setStatus('Pakkemengde kan ikke være 0.');
+    return;
+  }
 
   if (!enhet) {
     setStatus('Velg enhet.');
