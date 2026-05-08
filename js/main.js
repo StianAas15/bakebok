@@ -1638,12 +1638,12 @@ async function handleImageFile(file) {
   setStatus(''); render();
 }
 
-function setView(v){view=v;statusMsg='';if(v==='roles')roleSearch='';validationErrors={};render();}
-function goHome(){activeCategory=null;activeBakery=null;bakeryPrices={};bakeryPlans=[];bakeryStandardTasks=[];view='home';render();}
-function openRecipe(id){selected=id;selectedVersion=0;view='recipe';render();}
-function selVer(i){selectedVersion=i;render();}
-function setStatus(s){statusMsg=s;render();}
-function selectCat(id){activeCategory=id;render();}
+function setView(v){state.view=v;state.statusMsg='';if(v==='roles')state.roleSearch='';state.validationErrors={};render();}
+function goHome(){state.activeCategory=null;state.activeBakery=null;state.bakeryPrices={};state.bakeryPlans=[];state.bakeryStandardTasks=[];state.view='home';render();}
+function openRecipe(id){state.selected=id;state.selectedVersion=0;state.view='recipe';render();}
+function selVer(i){state.selectedVersion=i;render();}
+function setStatus(s){state.statusMsg=s;render();}
+function selectCat(id){state.activeCategory=id;render();}
 
 function backFromRecipe(){
   if (activeBakery) { view = 'bakery_recipes'; render(); }
