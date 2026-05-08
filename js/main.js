@@ -1168,35 +1168,35 @@ async function deleteBakery(id) {
 }
 
 async function enterBakery(id) {
-  activeBakery = id;
-  activeCategory = null;
-  view = 'bakery_home';
+  state.activeBakery = id;
+  state.activeCategory = null;
+  state.view = 'bakery_home';
   await Promise.all([loadBakeryPrices(id), loadBakeryPlans(id), loadBakeryStandardTasks(id)]);
   render();
 }
 
-function enterBakeryRecipes() { activeCategory = null; view = 'bakery_recipes'; render(); }
-function exitBakeryRecipes() { activeCategory = null; view = 'bakery_home'; render(); }
+function enterBakeryRecipes() { state.activeCategory = null; state.view = 'bakery_recipes'; render(); }
+function exitBakeryRecipes() { state.activeCategory = null; state.view = 'bakery_home'; render(); }
 function enterBakeryPrices() {
-  priceSearch = ''; priceListSearch = ''; editingPriceName = null;
-  window._newPriceNavn = ''; view = 'bakery_prices'; render();
+  state.priceSearch = ''; state.priceListSearch = ''; state.editingPriceName = null;
+  window._newPriceNavn = ''; state.view = 'bakery_prices'; render();
 }
 function exitBakeryPrices() {
-  priceSearch = ''; priceListSearch = ''; editingPriceName = null;
-  view = 'bakery_home'; render();
+  state.priceSearch = ''; state.priceListSearch = ''; state.editingPriceName = null;
+  state.view = 'bakery_home'; render();
 }
-function enterBakeryPlans() { view = 'bakery_plans'; render(); }
-function exitBakeryPlans() { view = 'bakery_home'; render(); }
+function enterBakeryPlans() { state.view = 'bakery_plans'; render(); }
+function exitBakeryPlans() { state.view = 'bakery_home'; render(); }
 
 function exitBakery() {
-  activeBakery = null; activeCategory = null;
-  bakeryPrices = {}; bakeryPlans = []; bakeryStandardTasks = [];
-  view = 'home'; render();
+  state.activeBakery = null; state.activeCategory = null;
+  state.bakeryPrices = {}; state.bakeryPlans = []; state.bakeryStandardTasks = [];
+  state.view = 'home'; render();
 }
 
 function moduleNotReady() {
   setStatus('Denne modulen er under utvikling.');
-  setTimeout(() => { statusMsg = ''; render(); }, 2500);
+  setTimeout(() => { state.statusMsg = ''; render(); }, 2500);
 }
 
 async function addRecipeToSelectedBakery(recipeId) {
@@ -1291,8 +1291,8 @@ async function saveBakeryPriceEdit(navn) {
 
 
 function startNewPlan() {
-  if (!activeBakery) return;
-  activePlan = {
+  if (!state.activeBakery) return;
+  state.activePlan = {
     id: planDocId(),
     dato: todayISO(),
     status: 'planlagt',
@@ -1300,86 +1300,82 @@ function startNewPlan() {
     opprettet: new Date().toISOString(),
     oppdatert: new Date().toISOString()
   };
-  editingElementIdx = null;
-  view = 'bakery_plan_edit';
+  state.editingElementIdx = null;
+  state.view = 'bakery_plan_edit';
   render();
 }
 
 function openPlan(planId) {
-  const p = bakeryPlans.find(x => x.id === planId);
+  const p = state.bakeryPlans.find(x => x.id === planId);
   if (!p) return;
-  activePlan = JSON.parse(JSON.stringify(p));
-  editingElementIdx = null;
-  view = 'bakery_plan_edit';
+  state.activePlan = JSON.parse(JSON.stringify(p));
+  state.editingElementIdx = null;
+  state.view = 'bakery_plan_edit';
   render();
 }
 
 function exitPlanEdit() {
-  // Lagre dato hvis den er endret
   const dateEl = document.getElementById('plan-dato');
-  if (dateEl && activePlan && activePlan.status !== 'gjennomført') {
-    activePlan.dato = dateEl.value;
+  if (dateEl && state.activePlan && state.activePlan.status !== 'gjennomført') {
+    state.activePlan.dato = dateEl.value;
   }
   savePlan();
-  activePlan = null;
-  editingElementIdx = null;
-  view = 'bakery_plans';
+  state.activePlan = null;
+  state.editingElementIdx = null;
+  state.view = 'bakery_plans';
   render();
 }
 
 async function savePlan() {
-  if (!activeBakery || !activePlan) return;
-  // Hent dato
+  if (!state.activeBakery || !state.activePlan) return;
   const dateEl = document.getElementById('plan-dato');
-  if (dateEl && activePlan.status !== 'gjennomført') {
-    activePlan.dato = dateEl.value;
+  if (dateEl && state.activePlan.status !== 'gjennomført') {
+    state.activePlan.dato = dateEl.value;
   }
-  activePlan.oppdatert = new Date().toISOString();
-  await setDoc(doc(db, 'bakeries', activeBakery, 'plans', activePlan.id), activePlan);
-  await loadBakeryPlans(activeBakery);
+  state.activePlan.oppdatert = new Date().toISOString();
+  await setDoc(doc(db, 'bakeries', state.activeBakery, 'plans', state.activePlan.id), state.activePlan);
+  await loadBakeryPlans(state.activeBakery);
 }
 
 async function deletePlan() {
-  if (!activeBakery || !activePlan) return;
+  if (!state.activeBakery || !state.activePlan) return;
   if (!confirm('Slette denne dagsplanen?')) return;
-  await deleteDoc(doc(db, 'bakeries', activeBakery, 'plans', activePlan.id));
-  await loadBakeryPlans(activeBakery);
-  activePlan = null;
-  editingElementIdx = null;
-  view = 'bakery_plans';
+  await deleteDoc(doc(db, 'bakeries', state.activeBakery, 'plans', state.activePlan.id));
+  await loadBakeryPlans(state.activeBakery);
+  state.activePlan = null;
+  state.editingElementIdx = null;
+  state.view = 'bakery_plans';
   render();
 }
 
 async function copyPlan() {
-  if (!activeBakery || !activePlan) return;
-  const newPlan = JSON.parse(JSON.stringify(activePlan));
+  if (!state.activeBakery || !state.activePlan) return;
+  const newPlan = JSON.parse(JSON.stringify(state.activePlan));
   newPlan.id = planDocId();
   newPlan.dato = todayISO();
   newPlan.status = 'planlagt';
   newPlan.opprettet = new Date().toISOString();
   newPlan.oppdatert = new Date().toISOString();
-  // Fjern snapshots og avkrysninger
   newPlan.elementer = (newPlan.elementer || []).map(el => {
     const copy = { ...el, gjort: false };
     delete copy.snapshot;
     return copy;
   });
-  await setDoc(doc(db, 'bakeries', activeBakery, 'plans', newPlan.id), newPlan);
-  await loadBakeryPlans(activeBakery);
-  activePlan = newPlan;
-  editingElementIdx = null;
+  await setDoc(doc(db, 'bakeries', state.activeBakery, 'plans', newPlan.id), newPlan);
+  await loadBakeryPlans(state.activeBakery);
+  state.activePlan = newPlan;
+  state.editingElementIdx = null;
   setStatus('Dagsplan kopiert. Du kan nå redigere kopien.');
-  setTimeout(() => { statusMsg = ''; render(); }, 2500);
+  setTimeout(() => { state.statusMsg = ''; render(); }, 2500);
   render();
 }
 
 async function markPlanGjennomført() {
-  if (!activePlan) return;
+  if (!state.activePlan) return;
   if (!confirm('Marker som gjennomført? Oppskriftene fryses (snapshot lagres) og kan ikke endres etterpå.')) return;
-  // Lagre snapshot for hver oppskrift
-  for (const el of activePlan.elementer || []) {
+  for (const el of state.activePlan.elementer || []) {
     if (el.type === 'oppskrift') {
-      const r = recipes.find(x => x.id === el.recipeId);
+      const r = state.recipes.find(x => x.id === el.recipeId);
       if (r) {
         const v = r.versions[0];
         const pcts = calcBakePcts(v.ingredientsList || []);
@@ -1392,26 +1388,26 @@ async function markPlanGjennomført() {
       }
     }
   }
-  activePlan.status = 'gjennomført';
+  state.activePlan.status = 'gjennomført';
   await savePlan();
   render();
 }
 
 async function markPlanPlanlagt() {
-  if (!activePlan) return;
+  if (!state.activePlan) return;
   if (!confirm('Endre tilbake til planlagt? Snapshots beholdes, men live-data brukes igjen.')) return;
-  activePlan.status = 'planlagt';
+  state.activePlan.status = 'planlagt';
   await savePlan();
   render();
 }
 
 function addRecipeToPlan() {
-  if (!activePlan) return;
+  if (!state.activePlan) return;
   const sel = document.getElementById('add-recipe-select');
   if (!sel || !sel.value) return;
   const recipeId = sel.value;
-  if (!activePlan.elementer) activePlan.elementer = [];
-  activePlan.elementer.push({
+  if (!state.activePlan.elementer) state.activePlan.elementer = [];
+  state.activePlan.elementer.push({
     type: 'oppskrift',
     recipeId,
     skaleringMode: 'faktor',
@@ -1429,37 +1425,35 @@ async function addNewStandardTask() {
   if (!inp) return;
   const navn = inp.value.trim();
   if (!navn) { setStatus('Skriv inn et oppgavenavn.'); return; }
-  // Lagre i biblioteket
   const id = 'task_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-  await setDoc(doc(db, 'bakeries', activeBakery, 'tasks', id), { navn });
-  await loadBakeryStandardTasks(activeBakery);
-  // Legg til i planen
-  if (!activePlan.elementer) activePlan.elementer = [];
-  activePlan.elementer.push({ type: 'oppgave', navn, gjort: false });
+  await setDoc(doc(db, 'bakeries', state.activeBakery, 'tasks', id), { navn });
+  await loadBakeryStandardTasks(state.activeBakery);
+  if (!state.activePlan.elementer) state.activePlan.elementer = [];
+  state.activePlan.elementer.push({ type: 'oppgave', navn, gjort: false });
   await savePlan();
   render();
 }
 
 async function deleteStandardTask(taskId) {
   if (!confirm('Slett denne standardoppgaven fra biblioteket? Dagsplaner som allerede bruker den påvirkes ikke.')) return;
-  await deleteDoc(doc(db, 'bakeries', activeBakery, 'tasks', taskId));
-  await loadBakeryStandardTasks(activeBakery);
+  await deleteDoc(doc(db, 'bakeries', state.activeBakery, 'tasks', taskId));
+  await loadBakeryStandardTasks(state.activeBakery);
   render();
 }
 
 function addCheckedTasksToPlan() {
-  if (!activePlan) return;
+  if (!state.activePlan) return;
   const checkboxes = document.querySelectorAll('.standard-task-row input[type="checkbox"]:checked');
   if (checkboxes.length === 0) {
     setStatus('Hak av minst én oppgave først.');
-    setTimeout(() => { statusMsg = ''; render(); }, 2000);
+    setTimeout(() => { state.statusMsg = ''; render(); }, 2000);
     return;
   }
-  if (!activePlan.elementer) activePlan.elementer = [];
+  if (!state.activePlan.elementer) state.activePlan.elementer = [];
   checkboxes.forEach(cb => {
     const navn = cb.dataset.task;
     if (navn) {
-      activePlan.elementer.push({ type: 'oppgave', navn, gjort: false });
+      state.activePlan.elementer.push({ type: 'oppgave', navn, gjort: false });
     }
   });
   savePlan();
@@ -1467,29 +1461,27 @@ function addCheckedTasksToPlan() {
 }
 
 function toggleElementDone(idx) {
-  if (!activePlan || !activePlan.elementer || !activePlan.elementer[idx]) return;
-  if (activePlan.status === 'gjennomført') return;
-  activePlan.elementer[idx].gjort = !activePlan.elementer[idx].gjort;
+  if (!state.activePlan || !state.activePlan.elementer || !state.activePlan.elementer[idx]) return;
+  if (state.activePlan.status === 'gjennomført') return;
+  state.activePlan.elementer[idx].gjort = !state.activePlan.elementer[idx].gjort;
   savePlan();
   render();
 }
 
 function removeElement(idx) {
-  if (!activePlan || !activePlan.elementer) return;
-  if (activePlan.status === 'gjennomført') return;
+  if (!state.activePlan || !state.activePlan.elementer) return;
+  if (state.activePlan.status === 'gjennomført') return;
   if (!confirm('Fjerne dette elementet fra planen?')) return;
-  activePlan.elementer.splice(idx, 1);
-  if (editingElementIdx === idx) editingElementIdx = null;
+  state.activePlan.elementer.splice(idx, 1);
+  if (state.editingElementIdx === idx) state.editingElementIdx = null;
   savePlan();
   render();
 }
 
 function editElement(idx) {
-  // Lagre eventuelle pågående endringer i andre felter først
   saveCurrentElementEdits();
-  editingElementIdx = idx;
-  // Sørg for at element har default produkter hvis modus skal byttes
-  const el = activePlan.elementer[idx];
+  state.editingElementIdx = idx;
+  const el = state.activePlan.elementer[idx];
   if (el.skaleringMode === 'produkter' && (!el.produkter || el.produkter.length === 0)) {
     el.produkter = [{ navn: '', antall: '', vektPerStk: '' }];
   }
@@ -1498,15 +1490,15 @@ function editElement(idx) {
 
 function cancelEditElement() {
   saveCurrentElementEdits();
-  editingElementIdx = null;
+  state.editingElementIdx = null;
   savePlan();
   render();
 }
 
 function setScaleMode(idx, mode) {
   saveCurrentElementEdits();
-  if (!activePlan || !activePlan.elementer[idx]) return;
-  const el = activePlan.elementer[idx];
+  if (!state.activePlan || !state.activePlan.elementer[idx]) return;
+  const el = state.activePlan.elementer[idx];
   el.skaleringMode = mode;
   if (mode === 'produkter' && (!el.produkter || el.produkter.length === 0)) {
     el.produkter = [{ navn: '', antall: '', vektPerStk: '' }];
@@ -1516,11 +1508,8 @@ function setScaleMode(idx, mode) {
 }
 
 function updateScaleField(idx, field, value) {
-  if (!activePlan || !activePlan.elementer[idx]) return;
-  activePlan.elementer[idx][field] = value;
-  // Lagrer ikke til DB ved hver tastetrykk – men oppdaterer lokalt
-  // Re-render for å oppdatere kostnadsoversikten
-  // Bruk debounce for å unngå at fokus mistes
+  if (!state.activePlan || !state.activePlan.elementer[idx]) return;
+  state.activePlan.elementer[idx][field] = value;
   clearTimeout(window._planRecalcTimer);
   window._planRecalcTimer = setTimeout(() => {
     savePlan();
@@ -1530,27 +1519,50 @@ function updateScaleField(idx, field, value) {
 
 function addProductRow(idx) {
   saveCurrentElementEdits();
-  if (!activePlan || !activePlan.elementer[idx]) return;
-  if (!activePlan.elementer[idx].produkter) activePlan.elementer[idx].produkter = [];
-  activePlan.elementer[idx].produkter.push({ navn: '', antall: '', vektPerStk: '' });
+  if (!state.activePlan || !state.activePlan.elementer[idx]) return;
+  if (!state.activePlan.elementer[idx].produkter) state.activePlan.elementer[idx].produkter = [];
+  state.activePlan.elementer[idx].produkter.push({ navn: '', antall: '', vektPerStk: '' });
   render();
 }
 
 function removeProductRow(idx, prodIdx) {
   saveCurrentElementEdits();
-  if (!activePlan || !activePlan.elementer[idx]) return;
-  const prods = activePlan.elementer[idx].produkter || [];
+  if (!state.activePlan || !state.activePlan.elementer[idx]) return;
+  const prods = state.activePlan.elementer[idx].produkter || [];
   prods.splice(prodIdx, 1);
   savePlan();
   render();
 }
 
 function saveCurrentElementEdits() {
-  // Hvis vi har en aktiv editor med produktrader, lagre dem først
-  if (editingElementIdx === null) return;
-  const idx = editingElementIdx;
-  if (!activePlan || !activePlan.elementer[idx]) return;
-  const el = activePlan.elementer[idx];
+  if (state.editingElementIdx === null) return;
+  const idx = state.editingElementIdx;
+  if (!state.activePlan || !state.activePlan.elementer[idx]) return;
+  const el = state.activePlan.elementer[idx];
+
+  if (el.skaleringMode === 'faktor') {
+    const inp = document.getElementById(`scale-faktor-${idx}`);
+    if (inp) el.faktor = inp.value;
+  }
+  if (el.skaleringMode === 'vekt') {
+    const inp = document.getElementById(`scale-malvekt-${idx}`);
+    if (inp) el.malDeigvekt = inp.value;
+  }
+  if (el.skaleringMode === 'produkter') {
+    const navnInputs = document.querySelectorAll(`#product-rows-${idx} .prod-navn`);
+    const antallInputs = document.querySelectorAll(`#product-rows-${idx} .prod-antall`);
+    const vektInputs = document.querySelectorAll(`#product-rows-${idx} .prod-vekt`);
+    const newProds = [];
+    navnInputs.forEach((inp, i) => {
+      newProds.push({
+        navn: inp.value,
+        antall: antallInputs[i] ? antallInputs[i].value : '',
+        vektPerStk: vektInputs[i] ? vektInputs[i].value : ''
+      });
+    });
+    if (newProds.length > 0) el.produkter = newProds;
+  }
+}
 
   if (el.skaleringMode === 'faktor') {
     const inp = document.getElementById(`scale-faktor-${idx}`);
@@ -1646,14 +1658,14 @@ function setStatus(s){state.statusMsg=s;render();}
 function selectCat(id){state.activeCategory=id;render();}
 
 function backFromRecipe(){
-  if (activeBakery) { view = 'bakery_recipes'; render(); }
-  else { view='home'; render(); }
+  if (state.activeBakery) { state.view = 'bakery_recipes'; render(); }
+  else { state.view='home'; render(); }
 }
 
 function cancelEdit() {
-  if (activeBakery) { view = 'bakery_recipes'; }
-  else { view = 'home'; }
-  editData = null;
+  if (state.activeBakery) { state.view = 'bakery_recipes'; }
+  else { state.view = 'home'; }
+  state.editData = null;
   render();
 }
 
@@ -1662,9 +1674,9 @@ function emptyIngredient() {
 }
 
 function startNew() {
-  validationErrors = {};
-  const initialBakeries = activeBakery ? [activeBakery] : [];
-  editData={
+  state.validationErrors = {};
+  const initialBakeries = state.activeBakery ? [state.activeBakery] : [];
+  state.editData={
     id:`recipe_${Date.now()}`,
     name:'', category:'', bakeries: initialBakeries,
     versions:[{
@@ -1673,28 +1685,28 @@ function startNew() {
       steps:'', images:[]
     }]
   };
-  view='edit';render();
+  state.view='edit';render();
 }
 function startEdit() {
-  validationErrors = {};
+  state.validationErrors = {};
   if (window.recalcTimer) clearTimeout(window.recalcTimer);
-  editData=JSON.parse(JSON.stringify(recipes.find(r=>r.id===selected)));
-  if (!editData.versions[0].ingredientsList) editData.versions[0].ingredientsList = [ emptyIngredient() ];
-  if (!Array.isArray(editData.bakeries)) editData.bakeries = [];
-  editData.versions[0].ingredientsList.forEach(ing => { if (ing.rolle === undefined) ing.rolle = ''; });
-  view='edit';render();
+  state.editData=JSON.parse(JSON.stringify(state.recipes.find(r=>r.id===state.selected)));
+  if (!state.editData.versions[0].ingredientsList) state.editData.versions[0].ingredientsList = [ emptyIngredient() ];
+  if (!Array.isArray(state.editData.bakeries)) state.editData.bakeries = [];
+  state.editData.versions[0].ingredientsList.forEach(ing => { if (ing.rolle === undefined) ing.rolle = ''; });
+  state.view='edit';render();
 }
 function addIngredient() {
   if (window.recalcTimer) clearTimeout(window.recalcTimer);
   saveFormState();
-  editData.versions[0].ingredientsList.push(emptyIngredient());
+  state.editData.versions[0].ingredientsList.push(emptyIngredient());
   render();
 }
 function removeIngredient(idx) {
   if (window.recalcTimer) clearTimeout(window.recalcTimer);
   saveFormState();
-  editData.versions[0].ingredientsList.splice(idx, 1);
-  if (editData.versions[0].ingredientsList.length === 0) editData.versions[0].ingredientsList.push(emptyIngredient());
+  state.editData.versions[0].ingredientsList.splice(idx, 1);
+  if (state.editData.versions[0].ingredientsList.length === 0) state.editData.versions[0].ingredientsList.push(emptyIngredient());
   render();
 }
 function saveFormState() {
@@ -1736,30 +1748,22 @@ function saveFormState() {
 }
 async function handleSave() {
   saveFormState();
-  validationErrors = {};
+  state.validationErrors = {};
   const missing = [];
-  if (!editData.name.trim()) { missing.push('Navn'); validationErrors.name = true; }
-  if (!editData.category) { missing.push('Kategori'); validationErrors.category = true; }
+  if (!state.editData.name.trim()) { missing.push('Navn'); state.validationErrors.name = true; }
+  if (!state.editData.category) { missing.push('Kategori'); state.validationErrors.category = true; }
   if (missing.length > 0) {
     setStatus(`${missing.join(' og ')} må fylles inn før oppskriften kan lagres.`);
     render(); return;
   }
-  editData.versions[0].ingredientsList = editData.versions[0].ingredientsList
+  state.editData.versions[0].ingredientsList = state.editData.versions[0].ingredientsList
     .filter(ing => ing.navn || ing.mengde || ing.enhet || ing.merknad);
-  loading=true;setStatus('Lagrer...');
-  await saveRecipeToDb(editData);
-  loading=false;
-  if (activeBakery) { view='bakery_recipes'; }
-  else { view='home'; }
-  editData=null;validationErrors={};render();
-}
-async function confirmDelete() {
-  const r=recipes.find(x=>x.id===selected);
-  if(!r||!confirm(`Vil du slette "${r.name}"?`)) return;
-  await deleteRecipeFromDb(r.id);
-  if (activeBakery) { view='bakery_recipes'; }
-  else { view='home'; }
-  render();
+  state.loading=true;setStatus('Lagrer...');
+  await saveRecipeToDb(state.editData);
+  state.loading=false;
+  if (state.activeBakery) { state.view='bakery_recipes'; }
+  else { state.view='home'; }
+  state.editData=null;state.validationErrors={};render();
 }
 
 function toBase64(file){
