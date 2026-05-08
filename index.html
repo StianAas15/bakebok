@@ -166,11 +166,14 @@
 
   .day-cost-summary { background: #e8f4ef; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
   .day-cost-total { font-size: 16px; font-weight: 600; color: #1a1a1a; margin-bottom: 8px; }
-  .day-cost-product-row { font-size: 13px; color: #555; padding: 4px 0; display: flex; justify-content: space-between; }
+.day-cost-product-row { font-size: 13px; color: #555; padding: 4px 0; display: flex; justify-content: space-between; }
+
+  .print-only { display: none; }
 
   .print-checkbox { display: inline-block; width: 14px; height: 14px; border: 1px solid #333; vertical-align: middle; margin-right: 8px; }
 
   @media print {
+    .print-only { display: block !important; }
     .no-print { display: none !important; }
     body { background: #fff; }
     .app { padding: 0; }
@@ -555,6 +558,7 @@ function calcElementInfo(element, isFrozen) {
   return {
     name: recipeData.name,
     category: recipeData.category,
+    baseDeigvekt: recipeData.deigvekt,
     faktor,
     scaledIng,
     scaledCost,
@@ -984,10 +988,10 @@ function bakeryPlanEditView() {
 
   const elementsHtml = elementer.map((el, idx) => renderPlanElement(el, idx, isFrozen)).join('');
 
-  // Kostnadsoversikt
+ // Kostnadsoversikt
   const costData = calcPlanCosts(activePlan, isFrozen);
   const costSummaryHtml = `
-    <div class="day-cost-summary">
+    <div class="day-cost-summary no-print">
       <div class="day-cost-total">Total råvarekostnad: ${fmtKr(costData.totalCost)}</div>
       ${costData.productCosts.length > 0 ? `
         <div style="font-weight:500;margin-bottom:4px;font-size:13px">Per produkt:</div>
@@ -1034,6 +1038,7 @@ function bakeryPlanEditView() {
 
     <p class="muted" style="margin-bottom:4px">${b.name}</p>
     <h2 style="margin-bottom:4px">Dagsplan</h2>
+    <p class="print-only" style="font-size:14px;margin-bottom:12px"><strong>${fmtDateShort(activePlan.dato)}</strong></p>
 
     <div class="card no-print">
       <label>Dato</label>
@@ -1045,8 +1050,6 @@ function bakeryPlanEditView() {
       <h2>${fmtDateShort(activePlan.dato)}</h2>
       <p class="muted">${b.name}</p>
     </div>
-
-    ${costSummaryHtml}
 
     ${elementer.length === 0
       ? `<div class="info-box">Ingen elementer i planen ennå. Bruk knappene under for å legge til.</div>`
@@ -1078,7 +1081,9 @@ function bakeryPlanEditView() {
       </div>
     ` : ''}
 
-    ${statusMsg?`<p class="status">${statusMsg}</p>`:''}`;
+    ${costSummaryHtml}
+
+    ${statusMsg?`<p class="status no-print">${statusMsg}</p>`:''}`;
 }
 
 function renderPlanElement(el, idx, isFrozen) {
@@ -1137,9 +1142,9 @@ function renderPlanElement(el, idx, isFrozen) {
   const deigvektStr = info.scaledDeigvekt > 0 ? `${Math.round(info.scaledDeigvekt)} g deig` : '';
 
   // Editor
-  let editorHtml = '';
+ let editorHtml = '';
   if (isEditing) {
-    editorHtml = renderPlanElementEditor(el, idx);
+    editorHtml = renderPlanElementEditor(el, idx, info.baseDeigvekt);
   }
 
   return `
@@ -1160,7 +1165,7 @@ function renderPlanElement(el, idx, isFrozen) {
     </div>`;
 }
 
-function renderPlanElementEditor(el, idx) {
+function renderPlanElementEditor(el, idx, baseDeigvekt) {
   const mode = el.skaleringMode || 'faktor';
   const produkter = el.produkter || [{ navn: '', antall: '', vektPerStk: '' }];
 
@@ -1177,19 +1182,13 @@ function renderPlanElementEditor(el, idx) {
     <div class="plan-recipe-edit no-print">
       <label>Skaleringsmodus</label>
       <div class="scale-mode-row">
-        <button class="scale-mode-btn ${mode==='faktor'?'active':''}" onclick="setScaleMode(${idx}, 'faktor')">Faktor</button>
-        <button class="scale-mode-btn ${mode==='vekt'?'active':''}" onclick="setScaleMode(${idx}, 'vekt')">Mål-deigvekt</button>
+        <button class="scale-mode-btn ${mode==='faktor'?'active':''}" onclick="setScaleMode(${idx}, 'faktor')">Mengde deig</button>
         <button class="scale-mode-btn ${mode==='produkter'?'active':''}" onclick="setScaleMode(${idx}, 'produkter')">Produkter</button>
       </div>
 
       ${mode === 'faktor' ? `
-        <label>Multipliser med</label>
+        <label>Multipliser grunnoppskriftens deigvekt (${baseDeigvekt > 0 ? Math.round(baseDeigvekt) : '?'} g) med</label>
         <input type="text" id="scale-faktor-${idx}" value="${el.faktor || ''}" placeholder="F.eks. 1,5" oninput="updateScaleField(${idx}, 'faktor', this.value)">
-      ` : ''}
-
-      ${mode === 'vekt' ? `
-        <label>Mål-deigvekt (g)</label>
-        <input type="text" id="scale-malvekt-${idx}" value="${el.malDeigvekt || ''}" placeholder="F.eks. 7800" oninput="updateScaleField(${idx}, 'malDeigvekt', this.value)">
       ` : ''}
 
       ${mode === 'produkter' ? `
