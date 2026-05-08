@@ -12,7 +12,7 @@ import {
   bakeryId, priceDocId, ingredientRoleId, planDocId,
   formatIngredient
 } from './utils.js';
-
+import { state, renderRef } from './state.js';
 
 
 function allCategories() { return [...DEFAULT_CATEGORIES, ...customCategories]; }
@@ -322,34 +322,39 @@ function calcPlanCosts(plan, isFrozen) {
 
 // =====================================================================
 // STATE
+// State holdes nå i state-objektet importert fra state.js.
+// Variabelnavnene under er bevisst beholdt som let-erklæringer som
+// "skygger" feltene på state-objektet. Dette er en mellomstasjon –
+// etter hvert som hver view-fil splittes ut, vil koden i hver fil
+// bruke state.X direkte i stedet.
 // =====================================================================
 
-let currentUser = null;
-let recipes = [];
-let customCategories = [];
-let bakeries = [];
-let ingredientRoles = {};
-let bakeryPrices = {};
-let bakeryPlans = [];
-let bakeryStandardTasks = [];
-let coverImageUrl = null;
-let anthropicKey = null;
-let view = 'login';
-let selected = null;
-let selectedVersion = 0;
-let editData = null;
-let activePlan = null;          // den aktuelle planen som vises/redigeres
-let editingElementIdx = null;   // indeks for element under redigering
-let loading = false;
-let statusMsg = '';
-let activeCategory = null;
-let activeBakery = null;
-let loginMode = 'choose';
-let roleSearch = '';
-let priceSearch = '';
-let priceListSearch = '';
-let editingPriceName = null;
-let validationErrors = {};
+let currentUser = state.currentUser;
+let recipes = state.recipes;
+let customCategories = state.customCategories;
+let bakeries = state.bakeries;
+let ingredientRoles = state.ingredientRoles;
+let bakeryPrices = state.bakeryPrices;
+let bakeryPlans = state.bakeryPlans;
+let bakeryStandardTasks = state.bakeryStandardTasks;
+let coverImageUrl = state.coverImageUrl;
+let anthropicKey = state.anthropicKey;
+let view = state.view;
+let selected = state.selected;
+let selectedVersion = state.selectedVersion;
+let editData = state.editData;
+let activePlan = state.activePlan;
+let editingElementIdx = state.editingElementIdx;
+let loading = state.loading;
+let statusMsg = state.statusMsg;
+let activeCategory = state.activeCategory;
+let activeBakery = state.activeBakery;
+let loginMode = state.loginMode;
+let roleSearch = state.roleSearch;
+let priceSearch = state.priceSearch;
+let priceListSearch = state.priceListSearch;
+let editingPriceName = state.editingPriceName;
+let validationErrors = state.validationErrors;
 
 function render() {
   const root = document.getElementById('root');
@@ -372,7 +377,8 @@ function render() {
   if (view === 'settings') bindSettings();
   if (view === 'roles') bindRoles();
   if (view === 'bakery_prices') bindPrices();
-}
+ }
+ renderRef.fn = render;
 
 function loginView() {
   return `
