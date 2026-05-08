@@ -70,7 +70,37 @@ let priceListSearch = state.priceListSearch;
 let editingPriceName = state.editingPriceName;
 let validationErrors = state.validationErrors;
 
+function syncFromState() {
+  currentUser = state.currentUser;
+  recipes = state.recipes;
+  customCategories = state.customCategories;
+  bakeries = state.bakeries;
+  ingredientRoles = state.ingredientRoles;
+  bakeryPrices = state.bakeryPrices;
+  bakeryPlans = state.bakeryPlans;
+  bakeryStandardTasks = state.bakeryStandardTasks;
+  coverImageUrl = state.coverImageUrl;
+  anthropicKey = state.anthropicKey;
+  view = state.view;
+  selected = state.selected;
+  selectedVersion = state.selectedVersion;
+  editData = state.editData;
+  activePlan = state.activePlan;
+  editingElementIdx = state.editingElementIdx;
+  loading = state.loading;
+  statusMsg = state.statusMsg;
+  activeCategory = state.activeCategory;
+  activeBakery = state.activeBakery;
+  loginMode = state.loginMode;
+  roleSearch = state.roleSearch;
+  priceSearch = state.priceSearch;
+  priceListSearch = state.priceListSearch;
+  editingPriceName = state.editingPriceName;
+  validationErrors = state.validationErrors;
+}
+
 function render() {
+  syncFromState();
   const root = document.getElementById('root');
   if (view === 'login') { root.innerHTML = loginView(); bindLogin(); return; }
   root.innerHTML = `<div class="app">${
@@ -1818,44 +1848,6 @@ Svar KUN med JSON, ingen annen tekst.`;
 }
 
 
-// =====================================================================
-// Synk-helper – kopierer state inn i de gamle let-variablene.
-// Denne kalles før hver rendring slik at homeView() o.l. ser oppdaterte
-// data. Forsvinner når views er splittet ut og bruker state direkte.
-// =====================================================================
-
-function syncFromState() {
-  currentUser = state.currentUser;
-  recipes = state.recipes;
-  customCategories = state.customCategories;
-  bakeries = state.bakeries;
-  ingredientRoles = state.ingredientRoles;
-  bakeryPrices = state.bakeryPrices;
-  bakeryPlans = state.bakeryPlans;
-  bakeryStandardTasks = state.bakeryStandardTasks;
-  coverImageUrl = state.coverImageUrl;
-  anthropicKey = state.anthropicKey;
-  view = state.view;
-  selected = state.selected;
-  selectedVersion = state.selectedVersion;
-  editData = state.editData;
-  activePlan = state.activePlan;
-  editingElementIdx = state.editingElementIdx;
-  loading = state.loading;
-  statusMsg = state.statusMsg;
-  activeCategory = state.activeCategory;
-  activeBakery = state.activeBakery;
-  loginMode = state.loginMode;
-  roleSearch = state.roleSearch;
-  priceSearch = state.priceSearch;
-  priceListSearch = state.priceListSearch;
-  editingPriceName = state.editingPriceName;
-  validationErrors = state.validationErrors;
-}
-
-// Wrap render slik at state alltid synkes før visning.
-const _renderOriginal = render;
-renderRef.fn = function() { syncFromState(); _renderOriginal(); };
 
 onAuthStateChanged(auth, async user => {
   if (user) {
@@ -1916,3 +1908,5 @@ Object.assign(window,{
 Object.defineProperty(window,'loginMode',{get:()=>loginMode,set:v=>loginMode=v});
 
 window.state = state; window.renderRef = renderRef;
+
+renderRef.fn = render;
