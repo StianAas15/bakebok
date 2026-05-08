@@ -1,94 +1,23 @@
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js';
-import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js';
-import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, query, where } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js';
-import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-functions.js';
+import { onAuthStateChanged, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js';
+import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, query, where } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
+import { ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js';
+import { httpsCallable } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-functions.js';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyC8cmkZQXfPBFPeFy4ShYqOdCHRqKmkIng",
-  authDomain: "bakebok.firebaseapp.com",
-  projectId: "bakebok",
-  storageBucket: "bakebok.firebasestorage.app",
-  messagingSenderId: "518882951454",
-  appId: "1:518882951454:web:ce11e02c5a223f24aa890f",
-  measurementId: "G-QF76VZH8MC"
-};
+import { app, auth, db, storage, functions, googleProvider } from './firebase.js';
+import { DEFAULT_CATEGORIES, BAKE_PCT_CATEGORIES, ROLE_OPTIONS, VOLUME_TO_ML, WEIGHT_TO_G, PRICE_UNITS } from './constants.js';
+import {
+  fmt, fmtDateTime, fmtDateShort, todayISO,
+  asNumber, hasNumberValue, parseTetthet,
+  fmtPct, fmtPct1, fmtKr,
+  bakeryId, priceDocId, ingredientRoleId, planDocId,
+  formatIngredient
+} from './utils.js';
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
-const functions = getFunctions(app, 'europe-west1');
-const googleProvider = new GoogleAuthProvider();
 
-const DEFAULT_CATEGORIES = [
-  { id: 'gjærbrød',  name: 'Brød på gjær',    icon: '' },
-  { id: 'surdeig',   name: 'Brød på surdeig',  icon: '' },
-  { id: 'søtbakst',  name: 'Søtbakst på gjær', icon: '' },
-  { id: 'kjeks',     name: 'Kjeks og scones',   icon: '' },
-  { id: 'kaker',     name: 'Kaker',             icon: '' },
-  { id: 'andre',     name: 'Andre bakverk',     icon: '' },
-];
-
-const BAKE_PCT_CATEGORIES = ['gjærbrød', 'surdeig', 'søtbakst'];
-
-const ROLE_OPTIONS = [
-  { id: '',             label: '— ingen —' },
-  { id: 'mel_siktet',   label: 'Mel siktet' },
-  { id: 'mel_sammalt',  label: 'Mel sammalt' },
-  { id: 'væske',        label: 'Væske' },
-  { id: 'egg',          label: 'Egg' },
-  { id: 'salt',         label: 'Salt' },
-  { id: 'søtning',      label: 'Søtning' },
-  { id: 'fett',         label: 'Fett' },
-  { id: 'gjær',         label: 'Gjær' },
-  { id: 'forfermenter', label: 'Forfermenter' },
-  { id: 'frø',          label: 'Frø' },
-  { id: 'nøtter',       label: 'Nøtter' },
-  { id: 'krydder',      label: 'Krydder' },
-  { id: 'annet',        label: 'Annet' },
-];
-
-const VOLUME_TO_ML = {
-  'l': 1000, 'liter': 1000, 'dl': 100, 'cl': 10, 'ml': 1,
-  'ss': 15, 'spiseskje': 15, 'spiseskjeer': 15,
-  'ts': 5, 'teskje': 5, 'teskjeer': 5,
-  'knivsodd': 1, 'kopp': 240, 'cup': 240,
-};
-
-const WEIGHT_TO_G = {
-  'g': 1, 'gr': 1, 'gram': 1, 'kg': 1000, 'kilo': 1000,
-};
-
-const PRICE_UNITS = ['kg', 'g', 'l', 'dl', 'ml', 'stk', 'pakke'];
 
 function allCategories() { return [...DEFAULT_CATEGORIES, ...customCategories]; }
 function getCatName(id) { return allCategories().find(c=>c.id===id)?.name || id; }
-function fmt(iso) { return new Date(iso).toLocaleDateString('nb-NO',{day:'2-digit',month:'short',year:'numeric'}); }
 
-function fmtDateTime(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('nb-NO', {
-    day: '2-digit', month: 'short', year: 'numeric'
-  }) + ' kl. ' + d.toLocaleTimeString('nb-NO', {
-    hour: '2-digit', minute: '2-digit'
-  });
-}
-
-function fmtDateShort(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('nb-NO', { weekday: 'short', day: '2-digit', month: 'long', year: 'numeric' });
-}
-
-function todayISO() {
-  const d = new Date();
-  d.setHours(12, 0, 0, 0);
-  return d.toISOString().split('T')[0];
-}
 
 function lookupRole(navn) {
   if (!navn) return '';
@@ -110,18 +39,7 @@ function lookupTetthet(navn) {
   return null;
 }
 
-function asNumber(x) {
-  if (x === null || x === undefined || x === '') return 0;
-  if (typeof x === 'number') return x;
-  const n = parseFloat(String(x).replace(',', '.'));
-  return isNaN(n) ? 0 : n;
-}
 
-function hasNumberValue(x) {
-  if (x === null || x === undefined) return false;
-  if (typeof x === 'number') return !isNaN(x);
-  return String(x).trim() !== '' && !isNaN(parseFloat(String(x).replace(',', '.')));
-}
 
 function tilGram(ing) {
   const mengde = asNumber(ing.mengde);
@@ -137,13 +55,6 @@ function tilGram(ing) {
   return null;
 }
 
-function formatIngredient(ing) {
-  const parts = [];
-  if (ing.mengde !== null && ing.mengde !== undefined && ing.mengde !== '') parts.push(ing.mengde);
-  if (ing.enhet) parts.push(ing.enhet);
-  if (ing.navn) parts.push(ing.navn);
-  return parts.join(' ');
-}
 
 function formatIngredientWithConv(ing) {
   const main = formatIngredient(ing);
@@ -194,8 +105,6 @@ function ingredientPct(ing, melTotal) {
 
 function shouldShowBakePct(categoryId) { return BAKE_PCT_CATEGORIES.includes(categoryId); }
 
-function fmtPct(n) { if (n===null||n===undefined||isNaN(n)) return ''; return Math.round(n)+'%'; }
-function fmtPct1(n) { if (n===null||n===undefined||isNaN(n)) return ''; return n.toFixed(1)+'%'; }
 
 function bakePctSummaryHtml(pcts, showBakePct) {
   if (!pcts) return '';
@@ -278,10 +187,6 @@ function calcRecipeCost(ingList) {
   return { totalCost, knownCount, unknownCount, unknownNames };
 }
 
-function fmtKr(n) {
-  if (n === null || n === undefined || isNaN(n)) return '';
-  return n.toFixed(2).replace('.', ',') + ' kr';
-}
 
 // =====================================================================
 // SKALERING – ny logikk for dagsplan
@@ -1571,9 +1476,6 @@ async function deleteCustomCat(id) {
   render();
 }
 
-function bakeryId(name) {
-  return 'bakery_' + name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9æøå_]/g, '') + '_' + Date.now();
-}
 
 async function addBakery() {
   const name = document.getElementById('new-bakery-name').value.trim();
@@ -1662,9 +1564,6 @@ async function removeRecipeFromBakery(recipeId, bakeryId) {
 // RÅVAREPRISER
 // =====================================================================
 
-function priceDocId(navn) {
-  return navn.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9æøå_]/g, '');
-}
 
 async function addBakeryPrice() {
   if (!activeBakery) return;
@@ -1727,9 +1626,6 @@ async function saveBakeryPriceEdit(navn) {
 // DAGSPLAN-FUNKSJONER
 // =====================================================================
 
-function planDocId() {
-  return 'plan_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-}
 
 function startNewPlan() {
   if (!activeBakery) return;
@@ -2021,15 +1917,7 @@ function saveCurrentElementEdits() {
 // INGREDIENS-ADMIN
 // =====================================================================
 
-function ingredientRoleId(navn) {
-  return navn.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9æøå_]/g, '');
-}
 
-function parseTetthet(str) {
-  if (str === null || str === undefined || str === '') return null;
-  const n = parseFloat(String(str).replace(',', '.'));
-  return isNaN(n) ? null : n;
-}
 
 async function addIngredientRole() {
   const navn = document.getElementById('new-role-navn').value.trim();
