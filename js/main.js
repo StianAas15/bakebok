@@ -1,324 +1,38 @@
-import { onAuthStateChanged, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js';
-import { collection, doc, setDoc, getDoc, getDocs, deleteDoc, query, where } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
-import { ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js';
-import { httpsCallable } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-functions.js';
+import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js';
+import { collection, doc, setDoc, getDoc, getDocs, deleteDoc } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
 
-import { app, auth, db, storage, functions, googleProvider } from './firebase.js';
+import { auth, db } from './firebase.js';
 import { DEFAULT_CATEGORIES, BAKE_PCT_CATEGORIES, ROLE_OPTIONS, VOLUME_TO_ML, WEIGHT_TO_G, PRICE_UNITS } from './constants.js';
 import {
   fmt, fmtDateTime, fmtDateShort, todayISO,
   asNumber, hasNumberValue, parseTetthet,
   fmtPct, fmtPct1, fmtKr,
-  bakeryId, priceDocId, ingredientRoleId, planDocId,
-  formatIngredient
+  bakeryId, priceDocId, ingredientRoleId, planDocId
 } from './utils.js';
 import { state, renderRef } from './state.js';
 
+import {
+  lookupRole, lookupTetthet, tilGram, formatIngredientWithConv,
+  calcBakePcts, ingredientPct, shouldShowBakePct, bakePctSummaryHtml,
+  pricePerGram, ingredientCost, calcRecipeCost,
+  scaleIngredients, calcFaktor, getRecipeDataForElement, calcElementInfo, calcPlanCosts
+} from './calculations.js';
+
+import {
+  loadRecipes, loadCustomCategories, loadBakeries,
+  loadBakeryPrices, loadBakeryPlans, loadBakeryStandardTasks,
+  loadAppSettings, loadIngredientRoles,
+  saveRecipeToDb, deleteRecipeFromDb, uploadFile
+} from './data.js';
+
+import {
+  isEmailAllowed, doGoogleLogin, doEmailLogin, doSignOut, createNewUser
+} from './auth.js';
 
 function allCategories() { return [...DEFAULT_CATEGORIES, ...customCategories]; }
 function getCatName(id) { return allCategories().find(c=>c.id===id)?.name || id; }
 
 
-function lookupRole(navn) {
-  if (!navn) return '';
-  const key = navn.trim().toLowerCase();
-  if (ingredientRoles[key]) return ingredientRoles[key].rolle;
-  for (const [name, data] of Object.entries(ingredientRoles)) {
-    if (key.includes(name) || name.includes(key)) return data.rolle;
-  }
-  return '';
-}
-
-function lookupTetthet(navn) {
-  if (!navn) return null;
-  const key = navn.trim().toLowerCase();
-  if (ingredientRoles[key]) return ingredientRoles[key].tetthet;
-  for (const [name, data] of Object.entries(ingredientRoles)) {
-    if (key.includes(name) || name.includes(key)) return data.tetthet;
-  }
-  return null;
-}
-
-
-
-function tilGram(ing) {
-  const mengde = asNumber(ing.mengde);
-  if (mengde === 0) return null;
-  const enhet = (ing.enhet || '').trim().toLowerCase();
-  if (WEIGHT_TO_G[enhet] !== undefined) return mengde * WEIGHT_TO_G[enhet];
-  if (VOLUME_TO_ML[enhet] !== undefined) {
-    const tetthet = lookupTetthet(ing.navn);
-    if (tetthet === null || tetthet === undefined) return null;
-    return mengde * VOLUME_TO_ML[enhet] * tetthet;
-  }
-  if (!enhet) return mengde;
-  return null;
-}
-
-
-function formatIngredientWithConv(ing) {
-  const main = formatIngredient(ing);
-  const enhet = (ing.enhet || '').trim().toLowerCase();
-  if (VOLUME_TO_ML[enhet] !== undefined) {
-    const gram = tilGram(ing);
-    if (gram !== null && gram > 0) {
-      return `${main} <span class="ing-conv">(≈ ${Math.round(gram)} g)</span>`;
-    }
-  }
-  return main;
-}
-
-function calcBakePcts(ingList) {
-  if (!Array.isArray(ingList)) return null;
-  let melSiktet = 0, melSammalt = 0, vaeskeTotal = 0, salt = 0, deigvekt = 0;
-  for (const ing of ingList) {
-    const gram = tilGram(ing);
-    if (gram === null || gram === 0) continue;
-    deigvekt += gram;
-    switch (ing.rolle) {
-      case 'mel_siktet':   melSiktet += gram; break;
-      case 'mel_sammalt':  melSammalt += gram; break;
-      case 'væske':        vaeskeTotal += gram; break;
-      case 'salt':         salt += gram; break;
-      case 'forfermenter':
-        melSiktet += gram / 2;
-        vaeskeTotal += gram / 2;
-        break;
-    }
-  }
-  const melTotal = melSiktet + melSammalt;
-  if (melTotal === 0) return { deigvekt };
-  return {
-    melTotal, melSiktet, melSammalt, vaeskeTotal, salt, deigvekt,
-    hydrering: (vaeskeTotal / melTotal) * 100,
-    saltPct: (salt / melTotal) * 100,
-    grovhet: (melSammalt / melTotal) * 100,
-  };
-}
-
-function ingredientPct(ing, melTotal) {
-  if (melTotal === 0) return null;
-  const gram = tilGram(ing);
-  if (gram === null || gram === 0) return null;
-  return (gram / melTotal) * 100;
-}
-
-function shouldShowBakePct(categoryId) { return BAKE_PCT_CATEGORIES.includes(categoryId); }
-
-
-function bakePctSummaryHtml(pcts, showBakePct) {
-  if (!pcts) return '';
-  const deigvektStr = pcts.deigvekt > 0 ? `<span class="pct-label">Deigvekt </span><span class="pct-val">${Math.round(pcts.deigvekt)} g</span>` : '';
-  if (!showBakePct || !pcts.hydrering) {
-    return deigvektStr ? `<div class="bakepct-summary">${deigvektStr}</div>` : '';
-  }
-  return `<div class="bakepct-summary">
-    <span class="pct-label">Hydrering </span><span class="pct-val">${fmtPct(pcts.hydrering)}</span>
-    <span class="pct-label">Salt </span><span class="pct-val">${fmtPct1(pcts.saltPct)}</span>
-    <span class="pct-label">Grovhet </span><span class="pct-val">${fmtPct(pcts.grovhet)}</span>
-    ${deigvektStr}
-  </div>`;
-}
-
-function pricePerGram(prisData) {
-  if (!prisData) return null;
-  const pris = asNumber(prisData.pris);
-  const pakkemengde = asNumber(prisData.pakkemengde);
-  const enhet = (prisData.enhet || '').trim().toLowerCase();
-  if (pakkemengde === 0) return null;
-  if (WEIGHT_TO_G[enhet] !== undefined) {
-    return { krPerGram: pris / (pakkemengde * WEIGHT_TO_G[enhet]), type: 'vekt' };
-  }
-  if (VOLUME_TO_ML[enhet] !== undefined) {
-    return { krPerMl: pris / (pakkemengde * VOLUME_TO_ML[enhet]), type: 'volum' };
-  }
-  if (enhet === 'stk' || enhet === 'pakke') {
-    return { krPerStk: pris / pakkemengde, type: 'stk' };
-  }
-  return null;
-}
-
-function ingredientCost(ing, prisData) {
-  if (!prisData) return null;
-  const ppg = pricePerGram(prisData);
-  if (!ppg) return null;
-  const mengde = asNumber(ing.mengde);
-  if (mengde === 0) return null;
-  const enhet = (ing.enhet || '').trim().toLowerCase();
-  if (ppg.type === 'stk') {
-    if (enhet === 'stk' || enhet === 'pakke' || !enhet) return mengde * ppg.krPerStk;
-    return null;
-  }
-  if (ppg.type === 'vekt') {
-    const gram = tilGram(ing);
-    if (gram === null) return null;
-    return gram * ppg.krPerGram;
-  }
-  if (ppg.type === 'volum') {
-    if (VOLUME_TO_ML[enhet] !== undefined) return (mengde * VOLUME_TO_ML[enhet]) * ppg.krPerMl;
-    if (WEIGHT_TO_G[enhet] !== undefined) {
-      const tetthet = lookupTetthet(ing.navn);
-      if (!tetthet) return null;
-      const gram = mengde * WEIGHT_TO_G[enhet];
-      return (gram / tetthet) * ppg.krPerMl;
-    }
-    return null;
-  }
-  return null;
-}
-
-function calcRecipeCost(ingList) {
-  if (!Array.isArray(ingList)) return null;
-  let totalCost = 0, knownCount = 0, unknownCount = 0;
-  const unknownNames = [];
-  for (const ing of ingList) {
-    if (!ing.navn || asNumber(ing.mengde) === 0) continue;
-    const navnKey = ing.navn.trim().toLowerCase();
-    const prisData = bakeryPrices[navnKey];
-    if (prisData) {
-      const cost = ingredientCost(ing, prisData);
-      if (cost !== null) { totalCost += cost; knownCount++; }
-      else { unknownCount++; unknownNames.push(ing.navn); }
-    } else {
-      unknownCount++; unknownNames.push(ing.navn);
-    }
-  }
-  if (knownCount === 0) return null;
-  return { totalCost, knownCount, unknownCount, unknownNames };
-}
-
-
-// =====================================================================
-// SKALERING – ny logikk for dagsplan
-// =====================================================================
-
-// Skalér en ingrediensliste med en faktor
-function scaleIngredients(ingList, faktor) {
-  if (!Array.isArray(ingList)) return [];
-  return ingList.map(ing => {
-    const mengde = asNumber(ing.mengde);
-    return {
-      ...ing,
-      mengde: mengde === 0 ? ing.mengde : Math.round(mengde * faktor * 100) / 100
-    };
-  });
-}
-
-// Regn ut faktor basert på skaleringsmodus
-function calcFaktor(element, baseDeigvekt) {
-  if (!element) return 1;
-
-  if (element.skaleringMode === 'faktor') {
-    return asNumber(element.faktor) || 1;
-  }
-
-  if (element.skaleringMode === 'vekt') {
-    const mal = asNumber(element.malDeigvekt);
-    if (mal === 0 || baseDeigvekt === 0) return 1;
-    return mal / baseDeigvekt;
-  }
-
-  if (element.skaleringMode === 'produkter') {
-    const totalProduktVekt = (element.produkter || []).reduce((sum, p) => {
-      return sum + (asNumber(p.antall) * asNumber(p.vektPerStk));
-    }, 0);
-    if (totalProduktVekt === 0 || baseDeigvekt === 0) return 1;
-    return totalProduktVekt / baseDeigvekt;
-  }
-
-  return 1;
-}
-
-// Hent oppskriftsdata for et plan-element (live eller frosset)
-function getRecipeDataForElement(element, isFrozen) {
-  if (isFrozen && element.snapshot) {
-    return {
-      name: element.snapshot.name,
-      category: element.snapshot.category,
-      ingredientsList: element.snapshot.ingredientsList,
-      deigvekt: element.snapshot.deigvekt
-    };
-  }
-  // Live: hent fra recipes
-  const r = recipes.find(x => x.id === element.recipeId);
-  if (!r) return null;
-  const v = r.versions[0];
-  const pcts = calcBakePcts(v.ingredientsList || []);
-  return {
-    name: r.name,
-    category: r.category,
-    ingredientsList: v.ingredientsList || [],
-    deigvekt: pcts ? pcts.deigvekt : 0
-  };
-}
-
-// Beregn skalert info for et plan-element
-function calcElementInfo(element, isFrozen) {
-  if (element.type !== 'oppskrift') return null;
-  const recipeData = getRecipeDataForElement(element, isFrozen);
-  if (!recipeData) return null;
-
-  const faktor = calcFaktor(element, recipeData.deigvekt);
-  const scaledIng = scaleIngredients(recipeData.ingredientsList, faktor);
-  const scaledCost = calcRecipeCost(scaledIng);
-  const scaledDeigvekt = recipeData.deigvekt * faktor;
-
-  // Total produktvekt og produkter
-  let produkter = element.produkter || [];
-  let totalProduktVekt = produkter.reduce((sum, p) => sum + (asNumber(p.antall) * asNumber(p.vektPerStk)), 0);
-
-  return {
-    name: recipeData.name,
-    category: recipeData.category,
-    baseDeigvekt: recipeData.deigvekt,
-    faktor,
-    scaledIng,
-    scaledCost,
-    scaledDeigvekt,
-    produkter,
-    totalProduktVekt,
-    recipeMissing: !recipeData
-  };
-}
-
-// Beregn total dagskostnad og kostnad per produkt
-function calcPlanCosts(plan, isFrozen) {
-  let totalCost = 0;
-  const productCosts = []; // { recipeName, productName, antall, vektPerStk, kostPerStk, totalKost }
-  const missingPriceWarnings = [];
-
-  for (const el of plan.elementer || []) {
-    if (el.type !== 'oppskrift') continue;
-    const info = calcElementInfo(el, isFrozen);
-    if (!info) continue;
-    if (info.scaledCost) {
-      totalCost += info.scaledCost.totalCost;
-      if (info.scaledCost.unknownCount > 0) {
-        missingPriceWarnings.push(`${info.name}: ${info.scaledCost.unknownNames.join(', ')}`);
-      }
-    }
-
-    if (info.produkter && info.produkter.length > 0 && info.totalProduktVekt > 0 && info.scaledCost) {
-      // Vekt per produkt × antall × (kostnad / totalvekt)
-      const krPerGram = info.scaledCost.totalCost / info.totalProduktVekt;
-      for (const p of info.produkter) {
-        const antall = asNumber(p.antall);
-        const vektPerStk = asNumber(p.vektPerStk);
-        if (antall === 0 || vektPerStk === 0) continue;
-        const kostPerStk = krPerGram * vektPerStk;
-        productCosts.push({
-          recipeName: info.name,
-          productName: p.navn || info.name,
-          antall, vektPerStk,
-          kostPerStk,
-          totalKost: kostPerStk * antall
-        });
-      }
-    }
-  }
-
-  return { totalCost, productCosts, missingPriceWarnings };
-}
 
 // =====================================================================
 // STATE
@@ -1367,95 +1081,8 @@ function selectPriceIngredient(navn) {
   }, 50);
 }
 
-async function isEmailAllowed(email) {
-  if (!email) return false;
-  const normalized = email.trim().toLowerCase();
-  try {
-    const docRef = doc(db, 'allowed_emails', normalized);
-    const snap = await getDoc(docRef);
-    return snap.exists();
-  } catch (e) { console.error('Hvitliste-sjekk feilet:', e); return false; }
-}
 
-async function doGoogleLogin() {
-  try { await signInWithPopup(auth, googleProvider); }
-  catch(e) { statusMsg='Innlogging feilet. Prøv igjen.'; render(); }
-}
-async function doEmailLogin() {
-  const email=document.getElementById('l-email')?.value.trim();
-  const pass=document.getElementById('l-pass')?.value;
-  if(!email||!pass){statusMsg='Fyll inn e-post og passord.';render();return;}
-  try { await signInWithEmailAndPassword(auth,email,pass); }
-  catch(e) { statusMsg='Feil e-post eller passord.'; render(); }
-}
-async function doSignOut() { await signOut(auth); }
 
-async function loadRecipes() {
-  const snap=await getDocs(collection(db,'recipes'));
-  recipes=snap.docs.map(d=>({id:d.id,...d.data()}))
-    .sort((a,b)=>new Date(b.versions[0].date)-new Date(a.versions[0].date));
-}
-async function loadCustomCategories() {
-  const snap=await getDocs(collection(db,'categories'));
-  customCategories=snap.docs.map(d=>({id:d.id,...d.data()}));
-}
-async function loadBakeries() {
-  const snap = await getDocs(collection(db, 'bakeries'));
-  bakeries = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b)=>a.name.localeCompare(b.name,'nb'));
-}
-async function loadBakeryPrices(bakeryId) {
-  bakeryPrices = {};
-  if (!bakeryId) return;
-  const snap = await getDocs(collection(db, 'bakeries', bakeryId, 'prices'));
-  snap.docs.forEach(d => {
-    const data = d.data();
-    if (data.navn) {
-      bakeryPrices[data.navn.toLowerCase()] = {
-        pris: data.pris, pakkemengde: data.pakkemengde, enhet: data.enhet, oppdatert: data.oppdatert,
-      };
-    }
-  });
-}
-async function loadBakeryPlans(bakeryId) {
-  bakeryPlans = [];
-  if (!bakeryId) return;
-  const snap = await getDocs(collection(db, 'bakeries', bakeryId, 'plans'));
-  bakeryPlans = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-}
-async function loadBakeryStandardTasks(bakeryId) {
-  bakeryStandardTasks = [];
-  if (!bakeryId) return;
-  const snap = await getDocs(collection(db, 'bakeries', bakeryId, 'tasks'));
-  bakeryStandardTasks = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-    .sort((a, b) => a.navn.localeCompare(b.navn, 'nb'));
-}
-async function loadAppSettings() {
-  const snap=await getDocs(collection(db,'settings'));
-  snap.docs.forEach(d=>{
-    if(d.id==='apikey') anthropicKey=d.data().key;
-    if(d.id==='cover') coverImageUrl=d.data().url;
-  });
-}
-async function loadIngredientRoles() {
-  const snap = await getDocs(collection(db, 'ingredient_roles'));
-  ingredientRoles = {};
-  snap.docs.forEach(d => {
-    const data = d.data();
-    if (data.navn && data.rolle !== undefined) {
-      ingredientRoles[data.navn.toLowerCase()] = {
-        rolle: data.rolle, tetthet: (data.tetthet === undefined) ? null : data.tetthet
-      };
-    }
-  });
-}
-async function saveRecipeToDb(recipe) {
-  await setDoc(doc(db,'recipes',recipe.id),recipe);
-  await loadRecipes();
-}
-async function deleteRecipeFromDb(id) {
-  await deleteDoc(doc(db,'recipes',id));
-  await loadRecipes();
-}
 async function saveApiKey() {
   const k=document.getElementById('akey-input').value.trim();
   if(!k){setStatus('Lim inn en API-nøkkel først.');return;}
@@ -1972,11 +1599,6 @@ async function saveAllRoleEdits() {
   setTimeout(() => { statusMsg = ''; render(); }, 2500);
 }
 
-async function uploadFile(file, path) {
-  const storageRef=ref(storage,path);
-  await uploadBytes(storageRef,file);
-  return getDownloadURL(storageRef);
-}
 async function handleImageFile(file) {
   if(!file) return;
   saveFormState();
@@ -2195,33 +1817,6 @@ Svar KUN med JSON, ingen annen tekst.`;
   }
 }
 
-async function createNewUser() {
-  const emailEl = document.getElementById('new-user-email');
-  const passEl = document.getElementById('new-user-pass');
-  const email = emailEl.value.trim();
-  const pass = passEl.value;
-  validationErrors.userEmail = false;
-  validationErrors.userPass = false;
-  const missing = [];
-  if (!email) { missing.push('e-post'); validationErrors.userEmail = true; }
-  if (!pass) { missing.push('passord'); validationErrors.userPass = true; }
-  if (missing.length > 0) { setStatus(`Fyll inn ${missing.join(' og ')}.`); render(); return; }
-  if (pass.length < 6) {
-    validationErrors.userPass = true;
-    setStatus('Passordet må være minst 6 tegn.');
-    render(); return;
-  }
-  setStatus('Oppretter bruker...');
-  try {
-    const createUser = httpsCallable(functions, 'createUser');
-    const result = await createUser({ email, password: pass });
-    setStatus(`Bruker opprettet: ${result.data.email}`);
-    validationErrors = {};
-    setTimeout(() => { statusMsg = ''; render(); }, 3000);
-  } catch (err) {
-    setStatus('Feil: ' + (err.message || 'Kunne ikke opprette bruker.'));
-  }
-}
 
 onAuthStateChanged(auth, async user => {
   if (user) {
