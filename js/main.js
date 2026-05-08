@@ -1,4 +1,4 @@
-import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js';
+import { onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js';
 import { collection, doc, setDoc, getDoc, getDocs, deleteDoc } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
 
 import { auth, db } from './firebase.js';
@@ -92,7 +92,7 @@ function render() {
   if (view === 'roles') bindRoles();
   if (view === 'bakery_prices') bindPrices();
  }
- renderRef.fn = render;
+
 
 function loginView() {
   return `
@@ -1818,25 +1818,79 @@ Svar KUN med JSON, ingen annen tekst.`;
 }
 
 
+// =====================================================================
+// Synk-helper – kopierer state inn i de gamle let-variablene.
+// Denne kalles før hver rendring slik at homeView() o.l. ser oppdaterte
+// data. Forsvinner når views er splittet ut og bruker state direkte.
+// =====================================================================
+
+function syncFromState() {
+  currentUser = state.currentUser;
+  recipes = state.recipes;
+  customCategories = state.customCategories;
+  bakeries = state.bakeries;
+  ingredientRoles = state.ingredientRoles;
+  bakeryPrices = state.bakeryPrices;
+  bakeryPlans = state.bakeryPlans;
+  bakeryStandardTasks = state.bakeryStandardTasks;
+  coverImageUrl = state.coverImageUrl;
+  anthropicKey = state.anthropicKey;
+  view = state.view;
+  selected = state.selected;
+  selectedVersion = state.selectedVersion;
+  editData = state.editData;
+  activePlan = state.activePlan;
+  editingElementIdx = state.editingElementIdx;
+  loading = state.loading;
+  statusMsg = state.statusMsg;
+  activeCategory = state.activeCategory;
+  activeBakery = state.activeBakery;
+  loginMode = state.loginMode;
+  roleSearch = state.roleSearch;
+  priceSearch = state.priceSearch;
+  priceListSearch = state.priceListSearch;
+  editingPriceName = state.editingPriceName;
+  validationErrors = state.validationErrors;
+}
+
+// Wrap render slik at state alltid synkes før visning.
+const _renderOriginal = render;
+renderRef.fn = function() { syncFromState(); _renderOriginal(); };
+
 onAuthStateChanged(auth, async user => {
   if (user) {
     const allowed = await isEmailAllowed(user.email);
     if (!allowed) {
       await signOut(auth);
-      currentUser = null;
-      view = 'login';
-      statusMsg = 'Denne kontoen har ikke tilgang. Kontakt eier.';
-      recipes = []; customCategories = []; bakeries = [];
-      render(); return;
+      state.currentUser = null;
+      state.view = 'login';
+      state.statusMsg = 'Denne kontoen har ikke tilgang. Kontakt eier.';
+      state.recipes = [];
+      state.customCategories = [];
+      state.bakeries = [];
+      render();
+      return;
     }
-    currentUser = user;
-    loading = true; view = 'home'; render();
-    await Promise.all([loadRecipes(), loadCustomCategories(), loadAppSettings(), loadIngredientRoles(), loadBakeries()]);
-    loading = false; render();
+    state.currentUser = user;
+    state.loading = true;
+    state.view = 'home';
+    render();
+    await Promise.all([
+      loadRecipes(),
+      loadCustomCategories(),
+      loadAppSettings(),
+      loadIngredientRoles(),
+      loadBakeries()
+    ]);
+    state.loading = false;
+    render();
   } else {
-    currentUser = null;
-    view = 'login'; loginMode = 'choose';
-    recipes = []; customCategories = []; bakeries = [];
+    state.currentUser = null;
+    state.view = 'login';
+    state.loginMode = 'choose';
+    state.recipes = [];
+    state.customCategories = [];
+    state.bakeries = [];
     render();
   }
 });
