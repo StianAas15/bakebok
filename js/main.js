@@ -29,100 +29,39 @@ import {
   isEmailAllowed, doGoogleLogin, doEmailLogin, doSignOut, createNewUser
 } from './auth.js';
 
-function allCategories() { return [...DEFAULT_CATEGORIES, ...customCategories]; }
+function allCategories() { return [...DEFAULT_CATEGORIES, ...state.customCategories]; }
 function getCatName(id) { return allCategories().find(c=>c.id===id)?.name || id; }
 
-
-
 // =====================================================================
-// STATE
-// State holdes nå i state-objektet importert fra state.js.
-// Variabelnavnene under er bevisst beholdt som let-erklæringer som
-// "skygger" feltene på state-objektet. Dette er en mellomstasjon –
-// etter hvert som hver view-fil splittes ut, vil koden i hver fil
-// bruke state.X direkte i stedet.
+// RENDER
 // =====================================================================
-
-let currentUser = state.currentUser;
-let recipes = state.recipes;
-let customCategories = state.customCategories;
-let bakeries = state.bakeries;
-let ingredientRoles = state.ingredientRoles;
-let bakeryPrices = state.bakeryPrices;
-let bakeryPlans = state.bakeryPlans;
-let bakeryStandardTasks = state.bakeryStandardTasks;
-let coverImageUrl = state.coverImageUrl;
-let anthropicKey = state.anthropicKey;
-let view = state.view;
-let selected = state.selected;
-let selectedVersion = state.selectedVersion;
-let editData = state.editData;
-let activePlan = state.activePlan;
-let editingElementIdx = state.editingElementIdx;
-let loading = state.loading;
-let statusMsg = state.statusMsg;
-let activeCategory = state.activeCategory;
-let activeBakery = state.activeBakery;
-let loginMode = state.loginMode;
-let roleSearch = state.roleSearch;
-let priceSearch = state.priceSearch;
-let priceListSearch = state.priceListSearch;
-let editingPriceName = state.editingPriceName;
-let validationErrors = state.validationErrors;
-
-function syncFromState() {
-  currentUser = state.currentUser;
-  recipes = state.recipes;
-  customCategories = state.customCategories;
-  bakeries = state.bakeries;
-  ingredientRoles = state.ingredientRoles;
-  bakeryPrices = state.bakeryPrices;
-  bakeryPlans = state.bakeryPlans;
-  bakeryStandardTasks = state.bakeryStandardTasks;
-  coverImageUrl = state.coverImageUrl;
-  anthropicKey = state.anthropicKey;
-  view = state.view;
-  selected = state.selected;
-  selectedVersion = state.selectedVersion;
-  editData = state.editData;
-  activePlan = state.activePlan;
-  editingElementIdx = state.editingElementIdx;
-  loading = state.loading;
-  statusMsg = state.statusMsg;
-  activeCategory = state.activeCategory;
-  activeBakery = state.activeBakery;
-  loginMode = state.loginMode;
-  roleSearch = state.roleSearch;
-  priceSearch = state.priceSearch;
-  priceListSearch = state.priceListSearch;
-  editingPriceName = state.editingPriceName;
-  validationErrors = state.validationErrors;
-}
 
 function render() {
-  syncFromState();
   const root = document.getElementById('root');
-  if (view === 'login') { root.innerHTML = loginView(); bindLogin(); return; }
+  if (state.view === 'login') { root.innerHTML = loginView(); bindLogin(); return; }
   root.innerHTML = `<div class="app">${
-    view === 'settings' ? settingsView() :
-    view === 'roles' ? rolesView() :
-    view === 'bakeries_admin' ? bakeriesAdminView() :
-    view === 'bakery_select' ? bakerySelectView() :
-    view === 'bakery_home' ? bakeryHomeView() :
-    view === 'bakery_recipes' ? bakeryRecipesView() :
-    view === 'bakery_prices' ? bakeryPricesView() :
-    view === 'bakery_plans' ? bakeryPlansView() :
-    view === 'bakery_plan_edit' ? bakeryPlanEditView() :
-    view === 'edit' ? editView() :
-    view === 'recipe' ? recipeView() :
+    state.view === 'settings' ? settingsView() :
+    state.view === 'roles' ? rolesView() :
+    state.view === 'bakeries_admin' ? bakeriesAdminView() :
+    state.view === 'bakery_select' ? bakerySelectView() :
+    state.view === 'bakery_home' ? bakeryHomeView() :
+    state.view === 'bakery_recipes' ? bakeryRecipesView() :
+    state.view === 'bakery_prices' ? bakeryPricesView() :
+    state.view === 'bakery_plans' ? bakeryPlansView() :
+    state.view === 'bakery_plan_edit' ? bakeryPlanEditView() :
+    state.view === 'edit' ? editView() :
+    state.view === 'recipe' ? recipeView() :
     homeView()
   }</div>`;
-  if (view === 'edit') bindEdit();
-  if (view === 'settings') bindSettings();
-  if (view === 'roles') bindRoles();
-  if (view === 'bakery_prices') bindPrices();
- }
+  if (state.view === 'edit') bindEdit();
+  if (state.view === 'settings') bindSettings();
+  if (state.view === 'roles') bindRoles();
+  if (state.view === 'bakery_prices') bindPrices();
+}
 
+// =====================================================================
+// VIEWS
+// =====================================================================
 
 function loginView() {
   return `
@@ -142,16 +81,16 @@ function loginView() {
         <input type="email" id="l-email" placeholder="din@epost.no">
         <label>Passord</label>
         <input type="password" id="l-pass" placeholder="Passord">
-        ${statusMsg?`<p class="status" style="color:#c0392b">${statusMsg}</p>`:''}
+        ${state.statusMsg?`<p class="status" style="color:#c0392b">${state.statusMsg}</p>`:''}
         <button class="btn-primary" style="width:100%;margin-top:12px" onclick="doEmailLogin()">Logg inn</button>
       </div>
     </div>`;
 }
 
 function bakeryBannerHtml() {
-  if (bakeries.length === 0) return '';
-  if (bakeries.length === 1) {
-    const b = bakeries[0];
+  if (state.bakeries.length === 0) return '';
+  if (state.bakeries.length === 1) {
+    const b = state.bakeries[0];
     return `<div class="bakery-banner" onclick="enterBakery('${b.id}')">
       <div class="bakery-banner-title">Mitt bakeri</div>
       <div class="bakery-banner-name">${b.name}</div>
@@ -161,27 +100,27 @@ function bakeryBannerHtml() {
   return `<div class="bakery-banner" onclick="setView('bakery_select')">
     <div class="bakery-banner-title">Mine bakerier</div>
     <div class="bakery-banner-name">Velg bakeri</div>
-    <div class="bakery-banner-action">${bakeries.length} bakerier registrert →</div>
+    <div class="bakery-banner-action">${state.bakeries.length} bakerier registrert →</div>
   </div>`;
 }
 
 function homeView() {
-  const hero = coverImageUrl
-    ? `<div class="hero" onclick="goHome()"><img src="${coverImageUrl}" alt="Forsidebilde"></div>`
+  const hero = state.coverImageUrl
+    ? `<div class="hero" onclick="goHome()"><img src="${state.coverImageUrl}" alt="Forsidebilde"></div>`
     : `<div class="hero-placeholder" onclick="goHome()">🍞</div>`;
 
   const catGrid = allCategories().map(c => {
-    const count = recipes.filter(r=>r.category===c.id).length;
-    return `<button class="cat-btn ${activeCategory===c.id?'active':''}" onclick="selectCat('${c.id}')">
+    const count = state.recipes.filter(r=>r.category===c.id).length;
+    return `<button class="cat-btn ${state.activeCategory===c.id?'active':''}" onclick="selectCat('${c.id}')">
       <span class="cat-name">${c.name}</span>
       <span class="cat-count">${count} oppskrift${count!==1?'er':''}</span>
     </button>`;
   }).join('');
 
-  const filtered = activeCategory ? recipes.filter(r=>r.category===activeCategory) : [];
-  const catLabel = activeCategory ? getCatName(activeCategory) : '';
+  const filtered = state.activeCategory ? state.recipes.filter(r=>r.category===state.activeCategory) : [];
+  const catLabel = state.activeCategory ? getCatName(state.activeCategory) : '';
 
-  const recipeList = activeCategory ? `
+  const recipeList = state.activeCategory ? `
     <button class="btn" style="margin-bottom:12px" onclick="selectCat(null)">← Alle kategorier</button>
     <h2 style="margin-bottom:12px">${catLabel}</h2>
     ${filtered.length===0?`<div class="info-box">Ingen oppskrifter i denne kategorien ennå.</div>`:''}
@@ -202,15 +141,15 @@ function homeView() {
       <button class="btn" onclick="setView('settings')">Innstillinger</button>
       <button class="btn-primary" onclick="startNew()">+ Ny</button>
     </div></div>
-    ${loading?`<p class="status">Henter oppskrifter...</p>`:''}
-    ${statusMsg && !loading?`<p class="status">${statusMsg}</p>`:''}
-    ${!activeCategory ? bakeryBannerHtml() : ''}
-    ${!activeCategory?`<div class="categories">${catGrid}</div>`:recipeList}`;
+    ${state.loading?`<p class="status">Henter oppskrifter...</p>`:''}
+    ${state.statusMsg && !state.loading?`<p class="status">${state.statusMsg}</p>`:''}
+    ${!state.activeCategory ? bakeryBannerHtml() : ''}
+    ${!state.activeCategory?`<div class="categories">${catGrid}</div>`:recipeList}`;
 }
 
 function bakerySelectView() {
-  const list = bakeries.map(b => {
-    const count = recipes.filter(r => Array.isArray(r.bakeries) && r.bakeries.includes(b.id)).length;
+  const list = state.bakeries.map(b => {
+    const count = state.recipes.filter(r => Array.isArray(r.bakeries) && r.bakeries.includes(b.id)).length;
     return `<div class="card card-clickable" onclick="enterBakery('${b.id}')">
       <p style="font-weight:500">${b.name}</p>
       <p class="muted">${count} oppskrift${count!==1?'er':''}</p>
@@ -223,8 +162,8 @@ function bakerySelectView() {
 }
 
 function bakeryHomeView() {
-  const b = bakeries.find(x => x.id === activeBakery);
-  if (!b) { view = 'home'; activeBakery = null; return homeView(); }
+  const b = state.bakeries.find(x => x.id === state.activeBakery);
+  if (!b) { state.view = 'home'; state.activeBakery = null; return homeView(); }
 
   const modules = [
     { id: 'recipes', icon: '🍞', name: 'Oppskrifter', action: "enterBakeryRecipes()" },
@@ -244,32 +183,32 @@ function bakeryHomeView() {
     <div class="topbar no-print"><button class="btn" onclick="exitBakery()">← Hovedside</button></div>
     <p class="muted" style="margin-bottom:4px">Bakeri</p>
     <h1 style="margin-bottom:1.25rem">${b.name}</h1>
-    ${statusMsg?`<p class="status">${statusMsg}</p>`:''}
+    ${state.statusMsg?`<p class="status">${state.statusMsg}</p>`:''}
     <div class="module-grid">${modBtns}</div>`;
 }
 
 function bakeryRecipesView() {
-  const b = bakeries.find(x => x.id === activeBakery);
-  if (!b) { view = 'home'; activeBakery = null; return homeView(); }
+  const b = state.bakeries.find(x => x.id === state.activeBakery);
+  if (!b) { state.view = 'home'; state.activeBakery = null; return homeView(); }
 
-  const bakeryRecipes = recipes.filter(r => Array.isArray(r.bakeries) && r.bakeries.includes(b.id));
+  const bakeryRecipes = state.recipes.filter(r => Array.isArray(r.bakeries) && r.bakeries.includes(b.id));
 
   const usedCategoryIds = [...new Set(bakeryRecipes.map(r => r.category))];
   const usedCategories = allCategories().filter(c => usedCategoryIds.includes(c.id));
 
   const chips = `
     <div class="filter-chips">
-      <button class="chip ${!activeCategory?'active':''}" onclick="selectCat(null)">Alle <span class="chip-count">${bakeryRecipes.length}</span></button>
+      <button class="chip ${!state.activeCategory?'active':''}" onclick="selectCat(null)">Alle <span class="chip-count">${bakeryRecipes.length}</span></button>
       ${usedCategories.map(c => {
         const count = bakeryRecipes.filter(r=>r.category===c.id).length;
-        return `<button class="chip ${activeCategory===c.id?'active':''}" onclick="selectCat('${c.id}')">${c.name} <span class="chip-count">${count}</span></button>`;
+        return `<button class="chip ${state.activeCategory===c.id?'active':''}" onclick="selectCat('${c.id}')">${c.name} <span class="chip-count">${count}</span></button>`;
       }).join('')}
     </div>`;
 
-  const filtered = activeCategory ? bakeryRecipes.filter(r=>r.category===activeCategory) : bakeryRecipes;
+  const filtered = state.activeCategory ? bakeryRecipes.filter(r=>r.category===state.activeCategory) : bakeryRecipes;
 
   const recipeList = filtered.length === 0
-    ? `<div class="info-box">Ingen oppskrifter ${activeCategory?'i denne kategorien':'er knyttet til bakeriet'} ennå.</div>`
+    ? `<div class="info-box">Ingen oppskrifter ${state.activeCategory?'i denne kategorien':'er knyttet til bakeriet'} ennå.</div>`
     : filtered.map(r=>{
         const thumb=r.versions.find(v=>v.images&&v.images.length>0)?.images[0]||null;
         const catName = getCatName(r.category);
@@ -292,13 +231,13 @@ function bakeryRecipesView() {
 }
 
 function bakeryPricesView() {
-  const b = bakeries.find(x => x.id === activeBakery);
-  if (!b) { view = 'home'; activeBakery = null; return homeView(); }
+  const b = state.bakeries.find(x => x.id === state.activeBakery);
+  if (!b) { state.view = 'home'; state.activeBakery = null; return homeView(); }
 
-  const search = (priceSearch || '').toLowerCase();
-  const listSearch = (priceListSearch || '').toLowerCase();
+  const search = (state.priceSearch || '').toLowerCase();
+  const listSearch = (state.priceListSearch || '').toLowerCase();
 
-  const allPriceEntries = Object.entries(bakeryPrices).sort((a, b) => a[0].localeCompare(b[0], 'nb'));
+  const allPriceEntries = Object.entries(state.bakeryPrices).sort((a, b) => a[0].localeCompare(b[0], 'nb'));
   const priceEntries = allPriceEntries.filter(([navn]) => !listSearch || navn.includes(listSearch));
 
   const priceList = priceEntries.length === 0
@@ -312,7 +251,7 @@ function bakeryPricesView() {
           else if (ppg.type === 'volum') perUnit = `${(ppg.krPerMl * 1000).toFixed(2).replace('.', ',')} kr/l`;
           else if (ppg.type === 'stk') perUnit = `${ppg.krPerStk.toFixed(2).replace('.', ',')} kr/stk`;
         }
-        if (editingPriceName === navn) {
+        if (state.editingPriceName === navn) {
           const unitOptsEdit = PRICE_UNITS.map(u =>
             `<option value="${u}" ${u === data.enhet ? 'selected' : ''}>${u}</option>`
           ).join('');
@@ -352,9 +291,9 @@ function bakeryPricesView() {
 
   let suggestionsHtml = '';
   if (search.length >= 2) {
-    const allIng = Object.keys(ingredientRoles)
+    const allIng = Object.keys(state.ingredientRoles)
       .filter(navn => navn.includes(search))
-      .filter(navn => !bakeryPrices[navn])
+      .filter(navn => !state.bakeryPrices[navn])
       .sort((a, b) => a.localeCompare(b, 'nb'))
       .slice(0, 8);
     if (allIng.length > 0) {
@@ -378,7 +317,7 @@ function bakeryPricesView() {
     <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Legg til pris</p>
       <p class="muted" style="margin-bottom:10px">Søk i ingredienslista, så fyller jeg ut navnet for deg.</p>
-      <input type="text" id="price-search" placeholder="Søk etter ingrediens..." value="${priceSearch || ''}">
+      <input type="text" id="price-search" placeholder="Søk etter ingrediens..." value="${state.priceSearch || ''}">
       ${suggestionsHtml}
       <label>Ingrediens</label>
       <input type="text" id="new-price-navn" placeholder="F.eks. hvetemel" value="${window._newPriceNavn || ''}">
@@ -393,21 +332,17 @@ function bakeryPricesView() {
 
     <div class="card">
       <p style="font-weight:500;margin-bottom:10px">Mine priser (${priceEntries.length} av ${allPriceEntries.length})</p>
-      <input type="text" id="price-list-search" placeholder="Søk i mine priser..." value="${priceListSearch || ''}" style="margin-bottom:10px">
+      <input type="text" id="price-list-search" placeholder="Søk i mine priser..." value="${state.priceListSearch || ''}" style="margin-bottom:10px">
       ${priceList}
     </div>
-    ${statusMsg?`<p class="status">${statusMsg}</p>`:''}`;
+    ${state.statusMsg?`<p class="status">${state.statusMsg}</p>`:''}`;
 }
 
-// =====================================================================
-// DAGSPLAN-VISNINGER
-// =====================================================================
-
 function bakeryPlansView() {
-  const b = bakeries.find(x => x.id === activeBakery);
-  if (!b) { view = 'home'; activeBakery = null; return homeView(); }
+  const b = state.bakeries.find(x => x.id === state.activeBakery);
+  if (!b) { state.view = 'home'; state.activeBakery = null; return homeView(); }
 
-  const sortedPlans = [...bakeryPlans].sort((a, b) => {
+  const sortedPlans = [...state.bakeryPlans].sort((a, b) => {
     const da = new Date(a.dato).getTime();
     const db_ = new Date(b.dato).getTime();
     return db_ - da;
@@ -436,22 +371,21 @@ function bakeryPlansView() {
     <div class="gap"><button class="btn-primary" onclick="startNewPlan()">+ Ny dagsplan</button></div></div>
     <p class="muted" style="margin-bottom:4px">${b.name}</p>
     <h2 style="margin-bottom:12px">Dagsplaner</h2>
-    ${statusMsg?`<p class="status">${statusMsg}</p>`:''}
+    ${state.statusMsg?`<p class="status">${state.statusMsg}</p>`:''}
     <div class="card">${plansList}</div>`;
 }
 
 function bakeryPlanEditView() {
-  const b = bakeries.find(x => x.id === activeBakery);
-  if (!b) { view = 'home'; activeBakery = null; return homeView(); }
-  if (!activePlan) { view = 'bakery_plans'; return bakeryPlansView(); }
+  const b = state.bakeries.find(x => x.id === state.activeBakery);
+  if (!b) { state.view = 'home'; state.activeBakery = null; return homeView(); }
+  if (!state.activePlan) { state.view = 'bakery_plans'; return bakeryPlansView(); }
 
-  const isFrozen = activePlan.status === 'gjennomført';
-  const elementer = activePlan.elementer || [];
+  const isFrozen = state.activePlan.status === 'gjennomført';
+  const elementer = state.activePlan.elementer || [];
 
   const elementsHtml = elementer.map((el, idx) => renderPlanElement(el, idx, isFrozen)).join('');
 
- // Kostnadsoversikt
-  const costData = calcPlanCosts(activePlan, isFrozen);
+  const costData = calcPlanCosts(state.activePlan, isFrozen);
   const costSummaryHtml = `
     <div class="day-cost-summary no-print">
       <div class="day-cost-total">Total råvarekostnad: ${fmtKr(costData.totalCost)}</div>
@@ -469,15 +403,13 @@ function bakeryPlanEditView() {
       ` : ''}
     </div>`;
 
-  // Bakeri-oppskrifter
-  const bakeryRecipes = recipes.filter(r => Array.isArray(r.bakeries) && r.bakeries.includes(activeBakery));
+  const bakeryRecipes = state.recipes.filter(r => Array.isArray(r.bakeries) && r.bakeries.includes(state.activeBakery));
   const recipeOpts = bakeryRecipes
     .sort((a, b) => a.name.localeCompare(b.name, 'nb'))
     .map(r => `<option value="${r.id}">${r.name}</option>`).join('');
 
-  // Standardoppgaver – avkrysning, kun de som ikke allerede er i planen
   const usedTaskNames = elementer.filter(e => e.type === 'oppgave').map(e => e.navn);
-  const availableStandardTasks = bakeryStandardTasks.filter(t => !usedTaskNames.includes(t.navn));
+  const availableStandardTasks = state.bakeryStandardTasks.filter(t => !usedTaskNames.includes(t.navn));
 
   const taskCheckboxes = availableStandardTasks.length === 0
     ? `<p class="muted" style="margin-bottom:6px">Ingen standardoppgaver registrert ennå. Skriv inn ny oppgave under for å legge til.</p>`
@@ -500,17 +432,12 @@ function bakeryPlanEditView() {
 
     <p class="muted" style="margin-bottom:4px">${b.name}</p>
     <h2 style="margin-bottom:4px">Dagsplan</h2>
-    <p class="print-only" style="font-size:14px;margin-bottom:12px"><strong>${fmtDateShort(activePlan.dato)}</strong></p>
+    <p class="print-only" style="font-size:14px;margin-bottom:12px"><strong>${fmtDateShort(state.activePlan.dato)}</strong></p>
 
     <div class="card no-print">
       <label>Dato</label>
-      <input type="date" id="plan-dato" value="${activePlan.dato}" ${isFrozen ? 'disabled' : ''}>
+      <input type="date" id="plan-dato" value="${state.activePlan.dato}" ${isFrozen ? 'disabled' : ''}>
       <p class="muted" style="margin-top:8px">Status: <strong>${isFrozen ? 'Gjennomført (frosset)' : 'Planlagt (live)'}</strong>${isFrozen ? ' <span class="plan-status-frosset">snapshot lagret</span>' : ''}</p>
-    </div>
-
-    <div class="card no-print" style="display:none" id="print-header">
-      <h2>${fmtDateShort(activePlan.dato)}</h2>
-      <p class="muted">${b.name}</p>
     </div>
 
     ${elementer.length === 0
@@ -545,11 +472,11 @@ function bakeryPlanEditView() {
 
     ${costSummaryHtml}
 
-    ${statusMsg?`<p class="status no-print">${statusMsg}</p>`:''}`;
+    ${state.statusMsg?`<p class="status no-print">${state.statusMsg}</p>`:''}`;
 }
 
 function renderPlanElement(el, idx, isFrozen) {
-  const isEditing = editingElementIdx === idx && !isFrozen;
+  const isEditing = state.editingElementIdx === idx && !isFrozen;
   const doneClass = el.gjort ? 'done' : '';
 
   if (el.type === 'oppgave') {
@@ -563,7 +490,6 @@ function renderPlanElement(el, idx, isFrozen) {
       </div>`;
   }
 
-  // Oppskrift
   const info = calcElementInfo(el, isFrozen);
   if (!info) {
     return `
@@ -576,7 +502,6 @@ function renderPlanElement(el, idx, isFrozen) {
       </div>`;
   }
 
-  // Skalering-info-tekst
   let modeLabel = '';
   if (el.skaleringMode === 'faktor') modeLabel = `${asNumber(el.faktor).toString().replace('.', ',')}×`;
   else if (el.skaleringMode === 'vekt') modeLabel = `${Math.round(info.scaledDeigvekt)} g deig`;
@@ -585,7 +510,6 @@ function renderPlanElement(el, idx, isFrozen) {
     modeLabel = prods || `${Math.round(info.scaledDeigvekt)} g deig`;
   }
 
-  // Skalert ingrediensliste på linje
   const ingLine = info.scaledIng
     .filter(ing => ing.navn && asNumber(ing.mengde) > 0)
     .map(ing => {
@@ -600,11 +524,9 @@ function renderPlanElement(el, idx, isFrozen) {
       return s;
     }).join(', ');
 
-  // Skalert deigvekt
   const deigvektStr = info.scaledDeigvekt > 0 ? `${Math.round(info.scaledDeigvekt)} g deig` : '';
 
-  // Editor
- let editorHtml = '';
+  let editorHtml = '';
   if (isEditing) {
     editorHtml = renderPlanElementEditor(el, idx, info.baseDeigvekt);
   }
@@ -665,9 +587,9 @@ function renderPlanElementEditor(el, idx, baseDeigvekt) {
 }
 
 function settingsView() {
-  const customList = customCategories.length===0
+  const customList = state.customCategories.length===0
     ? `<p class="muted" style="margin-bottom:12px">Ingen egne kategorier ennå.</p>`
-    : customCategories.map(c=>`
+    : state.customCategories.map(c=>`
         <div class="cat-row">
           <span style="font-size:14px">${c.name}</span>
           <button class="btn-danger" style="padding:4px 10px;font-size:12px" onclick="deleteCustomCat('${c.id}')">Slett</button>
@@ -676,12 +598,12 @@ function settingsView() {
     <div class="topbar no-print"><button class="btn" onclick="setView('home')">← Tilbake</button></div>
     <h2>Innstillinger</h2>
     <div class="card">
-      <p style="font-size:13px;margin-bottom:4px">Innlogget som: <strong>${currentUser?.email||''}</strong></p>
+      <p style="font-size:13px;margin-bottom:4px">Innlogget som: <strong>${state.currentUser?.email||''}</strong></p>
       <button class="btn" style="margin-top:8px" onclick="doSignOut()">Logg ut</button>
     </div>
     <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Forsidebilde</p>
-      ${coverImageUrl?`<img src="${coverImageUrl}" style="width:100%;border-radius:8px;margin-bottom:12px;max-height:150px;object-fit:cover">`:`<p class="muted" style="margin-bottom:12px">Ingen bilde valgt ennå.</p>`}
+      ${state.coverImageUrl?`<img src="${state.coverImageUrl}" style="width:100%;border-radius:8px;margin-bottom:12px;max-height:150px;object-fit:cover">`:`<p class="muted" style="margin-bottom:12px">Ingen bilde valgt ennå.</p>`}
       <input type="file" id="cover-input" accept="image/*" style="display:none">
       <button class="btn" onclick="document.getElementById('cover-input').click()">Last opp forsidebilde</button>
     </div>
@@ -695,36 +617,36 @@ function settingsView() {
     </div>
     <div class="card card-clickable" onclick="setView('bakeries_admin')">
       <p style="font-weight:500;margin-bottom:4px">Mine bakerier</p>
-      <p class="muted">${bakeries.length} bakeri${bakeries.length===1?'':'er'} registrert. Klikk for å opprette eller endre.</p>
+      <p class="muted">${state.bakeries.length} bakeri${state.bakeries.length===1?'':'er'} registrert. Klikk for å opprette eller endre.</p>
     </div>
     <div class="card card-clickable" onclick="setView('roles')">
       <p style="font-weight:500;margin-bottom:4px">Ingrediensliste</p>
-      <p class="muted">${Object.keys(ingredientRoles).length} ingredienser. Klikk for å redigere roller og tettheter.</p>
+      <p class="muted">${Object.keys(state.ingredientRoles).length} ingredienser. Klikk for å redigere roller og tettheter.</p>
     </div>
     <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Opprett ny bruker</p>
       <p class="muted" style="margin-bottom:10px">Legg til en ny person som skal ha tilgang til appen.</p>
       <label>E-postadresse</label>
-      <input type="email" id="new-user-email" class="${validationErrors.userEmail?'input-error':''}" placeholder="navn@epost.no">
+      <input type="email" id="new-user-email" class="${state.validationErrors.userEmail?'input-error':''}" placeholder="navn@epost.no">
       <label>Midlertidig passord</label>
-      <input type="text" id="new-user-pass" class="${validationErrors.userPass?'input-error':''}" placeholder="Minst 6 tegn">
+      <input type="text" id="new-user-pass" class="${state.validationErrors.userPass?'input-error':''}" placeholder="Minst 6 tegn">
       <button class="btn-primary" style="margin-top:10px;width:100%" onclick="createNewUser()">Opprett bruker</button>
     </div>
     <div class="card">
       <p style="font-weight:500;margin-bottom:6px">Claude API-nøkkel</p>
       <p class="muted" style="margin-bottom:8px">Brukes til å lese oppskrifter fra bilder.</p>
-      ${anthropicKey?`<p style="font-size:13px;color:#1D9E75;margin-bottom:8px">✅ API-nøkkel er lagret</p>`:`<p style="font-size:13px;color:#c0392b;margin-bottom:8px">❌ Ingen API-nøkkel</p>`}
+      ${state.anthropicKey?`<p style="font-size:13px;color:#1D9E75;margin-bottom:8px">✅ API-nøkkel er lagret</p>`:`<p style="font-size:13px;color:#c0392b;margin-bottom:8px">❌ Ingen API-nøkkel</p>`}
       <input type="password" id="akey-input" placeholder="sk-ant-...">
       <button class="btn-primary" style="margin-top:10px;width:100%" onclick="saveApiKey()">Lagre nøkkel</button>
     </div>
-    ${statusMsg?`<p class="status">${statusMsg}</p>`:''}`;
+    ${state.statusMsg?`<p class="status">${state.statusMsg}</p>`:''}`;
 }
 
 function bakeriesAdminView() {
-  const list = bakeries.length === 0
+  const list = state.bakeries.length === 0
     ? `<p class="muted" style="margin-bottom:12px">Ingen bakerier ennå.</p>`
-    : bakeries.map(b => {
-        const count = recipes.filter(r => Array.isArray(r.bakeries) && r.bakeries.includes(b.id)).length;
+    : state.bakeries.map(b => {
+        const count = state.recipes.filter(r => Array.isArray(r.bakeries) && r.bakeries.includes(b.id)).length;
         return `
         <div class="cat-row">
           <span style="font-size:14px"><strong>${b.name}</strong> <span class="muted">(${count} oppskrift${count!==1?'er':''})</span></span>
@@ -742,12 +664,12 @@ function bakeriesAdminView() {
         <button class="btn-primary" style="white-space:nowrap" onclick="addBakery()">+ Opprett</button>
       </div>
     </div>
-    ${statusMsg?`<p class="status">${statusMsg}</p>`:''}`;
+    ${state.statusMsg?`<p class="status">${state.statusMsg}</p>`:''}`;
 }
 
 function rolesView() {
-  const search = (roleSearch || '').toLowerCase();
-  const entries = Object.entries(ingredientRoles)
+  const search = (state.roleSearch || '').toLowerCase();
+  const entries = Object.entries(state.ingredientRoles)
     .sort((a, b) => a[0].localeCompare(b[0], 'nb'))
     .filter(([navn]) => !search || navn.includes(search));
   const roleOptionsHtml = (selected) =>
@@ -768,9 +690,9 @@ function rolesView() {
     <div class="card">
       <p class="muted" style="margin-bottom:10px">Ingredienser i lista brukes til å foreslå rolle og tetthet automatisk når du legger inn nye ingredienser. Tetthet (g/ml) brukes til å regne om volumenheter (dl, ss, ts) til gram. Endringer lagres når du klikker «Lagre endringer».</p>
       <div class="role-search">
-        <input type="text" id="role-search" placeholder="Søk i lista..." value="${roleSearch || ''}">
+        <input type="text" id="role-search" placeholder="Søk i lista..." value="${state.roleSearch || ''}">
       </div>
-      <p class="muted">Viser ${entries.length} av ${Object.keys(ingredientRoles).length} ingredienser.</p>
+      <p class="muted">Viser ${entries.length} av ${Object.keys(state.ingredientRoles).length} ingredienser.</p>
     </div>
     <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Legg til ny ingrediens</p>
@@ -788,16 +710,16 @@ function rolesView() {
       <div class="role-list">${rows || '<p class="muted">Ingen treff.</p>'}</div>
       <button class="btn-primary" style="width:100%;margin-top:12px" onclick="saveAllRoleEdits()">Lagre endringer</button>
     </div>
-    ${statusMsg?`<p class="status">${statusMsg}</p>`:''}`;
+    ${state.statusMsg?`<p class="status">${state.statusMsg}</p>`:''}`;
 }
 
 function recipeView() {
-  const r = recipes.find(x=>x.id===selected);
-  if (!r) { view='home'; return homeView(); }
-  const v = r.versions[selectedVersion];
+  const r = state.recipes.find(x=>x.id===state.selected);
+  if (!r) { state.view='home'; return homeView(); }
+  const v = r.versions[state.selectedVersion];
   const catName = getCatName(r.category);
   const tabs = r.versions.length>1?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${r.versions.map((ver,i)=>
-    `<button class="btn" style="font-size:12px;${i===selectedVersion?'background:#f0f0e8':''}" onclick="selVer(${i})">v${r.versions.length-i} · ${fmt(ver.date)}</button>`).join('')}</div>`:'';
+    `<button class="btn" style="font-size:12px;${i===state.selectedVersion?'background:#f0f0e8':''}" onclick="selVer(${i})">v${r.versions.length-i} · ${fmt(ver.date)}</button>`).join('')}</div>`:'';
   const imgs=(v.images||[]).map(img=>`<img class="recipe-img" src="${img}" alt="">`).join('');
   const ingList = (v.ingredientsList || []);
   const showPct = shouldShowBakePct(r.category);
@@ -817,7 +739,7 @@ function recipeView() {
       }).join('');
 
   let costHtml = '';
-  if (activeBakery) {
+  if (state.activeBakery) {
     const cost = calcRecipeCost(ingList);
     if (cost) {
       const perKg = pcts && pcts.deigvekt > 0 ? (cost.totalCost / pcts.deigvekt * 1000) : null;
@@ -827,19 +749,19 @@ function recipeView() {
           ${perKg ? `<div class="cost-sub">${fmtKr(perKg)} per kg deig</div>` : ''}
           ${cost.unknownCount > 0 ? `<div class="cost-sub" style="color:#856404;margin-top:4px">⚠ Mangler pris på ${cost.unknownCount} ingrediens${cost.unknownCount===1?'':'er'}: ${cost.unknownNames.join(', ')}</div>` : ''}
         </div>`;
-    } else if (Object.keys(bakeryPrices).length === 0) {
+    } else if (Object.keys(state.bakeryPrices).length === 0) {
       costHtml = `<div class="warn-box no-print">💰 Legg inn råvarepriser i bakeriet for å se kostnadsberegning.</div>`;
     } else {
       costHtml = `<div class="warn-box no-print">⚠ Ingen av ingrediensene har registrert pris.</div>`;
     }
   }
 
-  const recipeBakeries = (r.bakeries || []).map(bid => bakeries.find(b => b.id === bid)).filter(Boolean);
+  const recipeBakeries = (r.bakeries || []).map(bid => state.bakeries.find(b => b.id === bid)).filter(Boolean);
   const tagsHtml = recipeBakeries.length > 0
     ? `<div style="margin-bottom:8px">${recipeBakeries.map(b => `<span class="recipe-bakery-tag">🥖 ${b.name}</span>`).join('')}</div>` : '';
 
-  const remainingBakeries = bakeries.filter(b => !recipeBakeries.find(rb => rb.id === b.id));
-  const bakeryActionsHtml = activeBakery || bakeries.length === 0 ? '' : `
+  const remainingBakeries = state.bakeries.filter(b => !recipeBakeries.find(rb => rb.id === b.id));
+  const bakeryActionsHtml = state.activeBakery || state.bakeries.length === 0 ? '' : `
     <div class="card no-print">
       <p style="font-weight:500;margin-bottom:8px">Bakerier</p>
       ${recipeBakeries.length > 0 ? recipeBakeries.map(b => `
@@ -899,21 +821,21 @@ function ingredientRowHtml(ing, idx, melTotal, showPct) {
 }
 
 function editView() {
-  const v = editData.versions[0];
+  const v = state.editData.versions[0];
   const imgs=(v.images||[]).map(img=>`<img class="recipe-img" src="${img}" alt="">`).join('');
-  const catOptions=allCategories().map(c=>`<option value="${c.id}" ${editData.category===c.id?'selected':''}>${c.name}</option>`).join('');
+  const catOptions=allCategories().map(c=>`<option value="${c.id}" ${state.editData.category===c.id?'selected':''}>${c.name}</option>`).join('');
   const ingList = v.ingredientsList || [];
-  const showPct = shouldShowBakePct(editData.category);
+  const showPct = shouldShowBakePct(state.editData.category);
   const pcts = calcBakePcts(ingList);
   const melTotal = pcts && pcts.melTotal ? pcts.melTotal : 0;
   const ingRowsHtml = ingList.map((ing, i) => ingredientRowHtml(ing, i, melTotal, showPct)).join('');
   const summaryHtml = bakePctSummaryHtml(pcts, showPct);
-  const recipeBakeries = editData.bakeries || [];
-  const bakeryCheckboxes = bakeries.length === 0 ? '' : `
+  const recipeBakeries = state.editData.bakeries || [];
+  const bakeryCheckboxes = state.bakeries.length === 0 ? '' : `
     <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Bakerier</p>
       <p class="muted" style="margin-bottom:8px">Velg hvilke bakerier denne oppskriften er aktuell for.</p>
-      ${bakeries.map(b => `
+      ${state.bakeries.map(b => `
         <div class="bakery-checkbox-row">
           <input type="checkbox" id="bk-${b.id}" ${recipeBakeries.includes(b.id)?'checked':''}>
           <label for="bk-${b.id}" style="margin:0;font-size:14px;color:#1a1a1a">${b.name}</label>
@@ -922,7 +844,7 @@ function editView() {
     </div>`;
   return `
     <div class="topbar"><button class="btn" onclick="cancelEdit()">← Avbryt</button></div>
-    <h2>${editData.name||'Ny oppskrift'}</h2>
+    <h2>${state.editData.name||'Ny oppskrift'}</h2>
     <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Scan oppskrift fra bilde</p>
       <p class="muted" style="margin-bottom:10px">Ta bilde av en oppskrift – Claude leser den og fyller inn feltene automatisk.</p>
@@ -934,9 +856,9 @@ function editView() {
       </div>
     </div>
     <div class="card">
-      <label>Navn</label><input id="e-name" class="${validationErrors.name?'input-error':''}" value="${editData.name}" placeholder="F.eks. Surdeigsbaguetter">
+      <label>Navn</label><input id="e-name" class="${state.validationErrors.name?'input-error':''}" value="${state.editData.name}" placeholder="F.eks. Surdeigsbaguetter">
       <label>Kategori</label>
-      <select id="e-cat" class="${validationErrors.category?'input-error':''}"><option value="">Velg kategori...</option>${catOptions}</select>
+      <select id="e-cat" class="${state.validationErrors.category?'input-error':''}"><option value="">Velg kategori...</option>${catOptions}</select>
     </div>
     ${bakeryCheckboxes}
     <div class="card">
@@ -958,14 +880,18 @@ function editView() {
         <button class="btn" style="flex:1" onclick="document.getElementById('img-input').click()">🖼 Last opp</button>
       </div>
     </div>
-    ${statusMsg?`<p class="status">${statusMsg}</p>`:''}
-    <button class="btn-primary" style="width:100%;margin-top:4px" onclick="handleSave()" ${loading?'disabled':''}>
-      ${loading?'Lagrer...':'Lagre oppskrift'}</button>`;
+    ${state.statusMsg?`<p class="status">${state.statusMsg}</p>`:''}
+    <button class="btn-primary" style="width:100%;margin-top:4px" onclick="handleSave()" ${state.loading?'disabled':''}>
+      ${state.loading?'Lagrer...':'Lagre oppskrift'}</button>`;
 }
+
+// =====================================================================
+// BIND-FUNKSJONER
+// =====================================================================
 
 function bindLogin() {
   document.getElementById('root').addEventListener('keydown', e => {
-    if (e.key==='Enter' && loginMode==='email') doEmailLogin();
+    if (e.key==='Enter' && state.loginMode==='email') doEmailLogin();
   });
 }
 
@@ -1005,15 +931,15 @@ function bindEdit() {
   const catSelect = document.getElementById('e-cat');
   if (catSelect) {
     catSelect.addEventListener('change', () => {
-      validationErrors.category = false;
+      state.validationErrors.category = false;
       saveFormState(); render();
     });
   }
   const nameEl = document.getElementById('e-name');
   if (nameEl) {
     nameEl.addEventListener('input', () => {
-      if (validationErrors.name) {
-        validationErrors.name = false;
+      if (state.validationErrors.name) {
+        state.validationErrors.name = false;
         nameEl.classList.remove('input-error');
       }
     });
@@ -1021,9 +947,9 @@ function bindEdit() {
 }
 
 function updateBakePctsInPlace() {
-  if (!editData) return;
-  const ingList = editData.versions[0].ingredientsList || [];
-  const showPct = shouldShowBakePct(editData.category);
+  if (!state.editData) return;
+  const ingList = state.editData.versions[0].ingredientsList || [];
+  const showPct = shouldShowBakePct(state.editData.category);
   const pcts = calcBakePcts(ingList);
   const melTotal = pcts && pcts.melTotal ? pcts.melTotal : 0;
   const summary = document.querySelector('.bakepct-summary');
@@ -1055,26 +981,26 @@ function bindSettings() {
     const file=e.target.files[0]; if(!file) return;
     setStatus('Laster opp forsidebilde...');
     const url=await uploadFile(file,`cover/cover_${Date.now()}.jpg`);
-    coverImageUrl=url;
+    state.coverImageUrl=url;
     await setDoc(doc(db,'settings','cover'),{url});
     setStatus('Forsidebilde lagret!');
-    setTimeout(()=>{statusMsg='';render();},2000);
+    setTimeout(()=>{state.statusMsg='';render();},2000);
     render();
   });
   const emailEl = document.getElementById('new-user-email');
   if (emailEl) emailEl.addEventListener('input', () => {
-    if (validationErrors.userEmail) { validationErrors.userEmail = false; emailEl.classList.remove('input-error'); }
+    if (state.validationErrors.userEmail) { state.validationErrors.userEmail = false; emailEl.classList.remove('input-error'); }
   });
   const passEl = document.getElementById('new-user-pass');
   if (passEl) passEl.addEventListener('input', () => {
-    if (validationErrors.userPass) { validationErrors.userPass = false; passEl.classList.remove('input-error'); }
+    if (state.validationErrors.userPass) { state.validationErrors.userPass = false; passEl.classList.remove('input-error'); }
   });
 }
 
 function bindRoles() {
   const search = document.getElementById('role-search');
   if (search) search.addEventListener('input', (e) => {
-    roleSearch = e.target.value;
+    state.roleSearch = e.target.value;
     const cursor = e.target.selectionStart;
     render();
     const newSearch = document.getElementById('role-search');
@@ -1085,7 +1011,7 @@ function bindRoles() {
 function bindPrices() {
   const search = document.getElementById('price-search');
   if (search) search.addEventListener('input', (e) => {
-    priceSearch = e.target.value;
+    state.priceSearch = e.target.value;
     const cursor = e.target.selectionStart;
     render();
     const newSearch = document.getElementById('price-search');
@@ -1093,7 +1019,7 @@ function bindPrices() {
   });
   const listSearch = document.getElementById('price-list-search');
   if (listSearch) listSearch.addEventListener('input', (e) => {
-    priceListSearch = e.target.value;
+    state.priceListSearch = e.target.value;
     const cursor = e.target.selectionStart;
     render();
     const newListSearch = document.getElementById('price-list-search');
@@ -1103,7 +1029,7 @@ function bindPrices() {
 
 function selectPriceIngredient(navn) {
   window._newPriceNavn = navn;
-  priceSearch = '';
+  state.priceSearch = '';
   render();
   setTimeout(() => {
     const el = document.getElementById('new-price-pris');
@@ -1111,34 +1037,171 @@ function selectPriceIngredient(navn) {
   }, 50);
 }
 
+// =====================================================================
+// HANDLER-FUNKSJONER
+// =====================================================================
 
+function setView(v){state.view=v;state.statusMsg='';if(v==='roles')state.roleSearch='';state.validationErrors={};render();}
+function goHome(){state.activeCategory=null;state.activeBakery=null;state.bakeryPrices={};state.bakeryPlans=[];state.bakeryStandardTasks=[];state.view='home';render();}
+function openRecipe(id){state.selected=id;state.selectedVersion=0;state.view='recipe';render();}
+function selVer(i){state.selectedVersion=i;render();}
+function setStatus(s){state.statusMsg=s;render();}
+function selectCat(id){state.activeCategory=id;render();}
+
+function backFromRecipe(){
+  if (state.activeBakery) { state.view = 'bakery_recipes'; render(); }
+  else { state.view='home'; render(); }
+}
+
+function cancelEdit() {
+  if (state.activeBakery) { state.view = 'bakery_recipes'; }
+  else { state.view = 'home'; }
+  state.editData = null;
+  render();
+}
+
+function emptyIngredient() {
+  return { mengde: '', enhet: '', navn: '', merknad: '', rolle: '' };
+}
+
+function startNew() {
+  state.validationErrors = {};
+  const initialBakeries = state.activeBakery ? [state.activeBakery] : [];
+  state.editData={
+    id:`recipe_${Date.now()}`,
+    name:'', category:'', bakeries: initialBakeries,
+    versions:[{
+      date:new Date().toISOString(), notes:'',
+      ingredientsList:[ emptyIngredient() ],
+      steps:'', images:[]
+    }]
+  };
+  state.view='edit';render();
+}
+
+function startEdit() {
+  state.validationErrors = {};
+  if (window.recalcTimer) clearTimeout(window.recalcTimer);
+  state.editData=JSON.parse(JSON.stringify(state.recipes.find(r=>r.id===state.selected)));
+  if (!state.editData.versions[0].ingredientsList) state.editData.versions[0].ingredientsList = [ emptyIngredient() ];
+  if (!Array.isArray(state.editData.bakeries)) state.editData.bakeries = [];
+  state.editData.versions[0].ingredientsList.forEach(ing => { if (ing.rolle === undefined) ing.rolle = ''; });
+  state.view='edit';render();
+}
+
+function addIngredient() {
+  if (window.recalcTimer) clearTimeout(window.recalcTimer);
+  saveFormState();
+  state.editData.versions[0].ingredientsList.push(emptyIngredient());
+  render();
+}
+
+function removeIngredient(idx) {
+  if (window.recalcTimer) clearTimeout(window.recalcTimer);
+  saveFormState();
+  state.editData.versions[0].ingredientsList.splice(idx, 1);
+  if (state.editData.versions[0].ingredientsList.length === 0) state.editData.versions[0].ingredientsList.push(emptyIngredient());
+  render();
+}
+
+function saveFormState() {
+  const n=document.getElementById('e-name');
+  const c=document.getElementById('e-cat');
+  const s=document.getElementById('e-steps');
+  const nt=document.getElementById('e-notes');
+  if(n)state.editData.name=n.value;
+  if(c)state.editData.category=c.value;
+  if(s)state.editData.versions[0].steps=s.value;
+  if(nt)state.editData.versions[0].notes=nt.value;
+  const checkedBakeries = [];
+  state.bakeries.forEach(b => {
+    const cb = document.getElementById('bk-' + b.id);
+    if (cb && cb.checked) checkedBakeries.push(b.id);
+  });
+  state.editData.bakeries = checkedBakeries;
+  const container = document.getElementById('ing-container');
+  if (container) {
+    const rows = container.querySelectorAll('.ing-row');
+    const merknader = container.querySelectorAll('.ing-merknad-input');
+    const newList = [];
+    rows.forEach((row, i) => {
+      const mengdeStr = row.querySelector('.ing-mengde').value.trim();
+      const enhet = row.querySelector('.ing-enhet').value.trim();
+      const navn = row.querySelector('.ing-navn').value.trim();
+      const rolle = row.querySelector('.ing-rolle').value;
+      const merknad = merknader[i] ? merknader[i].value.trim() : '';
+      let mengde = null;
+      if (mengdeStr !== '') {
+        const num = parseFloat(mengdeStr.replace(',', '.'));
+        mengde = isNaN(num) ? mengdeStr : num;
+      }
+      const finalRolle = rolle || lookupRole(navn);
+      newList.push({ mengde, enhet, navn, merknad, rolle: finalRolle });
+    });
+    state.editData.versions[0].ingredientsList = newList;
+  }
+}
+
+async function handleSave() {
+  saveFormState();
+  state.validationErrors = {};
+  const missing = [];
+  if (!state.editData.name.trim()) { missing.push('Navn'); state.validationErrors.name = true; }
+  if (!state.editData.category) { missing.push('Kategori'); state.validationErrors.category = true; }
+  if (missing.length > 0) {
+    setStatus(`${missing.join(' og ')} må fylles inn før oppskriften kan lagres.`);
+    render(); return;
+  }
+  state.editData.versions[0].ingredientsList = state.editData.versions[0].ingredientsList
+    .filter(ing => ing.navn || ing.mengde || ing.enhet || ing.merknad);
+  state.loading=true;setStatus('Lagrer...');
+  await saveRecipeToDb(state.editData);
+  state.loading=false;
+  if (state.activeBakery) { state.view='bakery_recipes'; }
+  else { state.view='home'; }
+  state.editData=null;state.validationErrors={};render();
+}
+
+async function confirmDelete() {
+  const r=state.recipes.find(x=>x.id===state.selected);
+  if(!r||!confirm(`Vil du slette "${r.name}"?`)) return;
+  await deleteRecipeFromDb(r.id);
+  if (state.activeBakery) { state.view='bakery_recipes'; }
+  else { state.view='home'; }
+  render();
+}
+
+// =====================================================================
+// KATEGORIER OG BAKERIER
+// =====================================================================
 
 async function saveApiKey() {
   const k=document.getElementById('akey-input').value.trim();
   if(!k){setStatus('Lim inn en API-nøkkel først.');return;}
-  anthropicKey=k;
+  state.anthropicKey=k;
   await setDoc(doc(db,'settings','apikey'),{key:k});
   setStatus('API-nøkkel lagret!');
-  setTimeout(()=>{statusMsg='';render();},2000);
+  setTimeout(()=>{state.statusMsg='';render();},2000);
 }
+
 async function addCustomCat() {
   const name=document.getElementById('new-cat-name').value.trim();
   if(!name){setStatus('Skriv inn et kategorinavn.');return;}
   const id='custom_'+name.toLowerCase().replace(/\s+/g,'_')+'_'+Date.now();
   const cat={id,name,icon:''};
   await setDoc(doc(db,'categories',id),cat);
-  customCategories.push(cat);
+  state.customCategories.push(cat);
   setStatus('Kategori lagt til!');
-  setTimeout(()=>{statusMsg='';render();},1500);
-  render();
-}
-async function deleteCustomCat(id) {
-  if(!confirm('Slette denne kategorien?')) return;
-  await deleteDoc(doc(db,'categories',id));
-  customCategories=customCategories.filter(c=>c.id!==id);
+  setTimeout(()=>{state.statusMsg='';render();},1500);
   render();
 }
 
+async function deleteCustomCat(id) {
+  if(!confirm('Slette denne kategorien?')) return;
+  await deleteDoc(doc(db,'categories',id));
+  state.customCategories=state.customCategories.filter(c=>c.id!==id);
+  render();
+}
 
 async function addBakery() {
   const name = document.getElementById('new-bakery-name').value.trim();
@@ -1147,23 +1210,23 @@ async function addBakery() {
   await setDoc(doc(db, 'bakeries', id), { name, createdAt: new Date().toISOString() });
   await loadBakeries();
   setStatus(`Bakeri "${name}" opprettet.`);
-  setTimeout(() => { statusMsg = ''; render(); }, 2000);
+  setTimeout(() => { state.statusMsg = ''; render(); }, 2000);
   render();
 }
 
 async function deleteBakery(id) {
-  const b = bakeries.find(x => x.id === id);
+  const b = state.bakeries.find(x => x.id === id);
   if (!b) return;
   if (!confirm(`Slette "${b.name}"? Oppskrifter mister bare taggen, ikke selve oppskriftene.`)) return;
   await deleteDoc(doc(db, 'bakeries', id));
-  const affected = recipes.filter(r => Array.isArray(r.bakeries) && r.bakeries.includes(id));
+  const affected = state.recipes.filter(r => Array.isArray(r.bakeries) && r.bakeries.includes(id));
   for (const r of affected) {
     const updated = { ...r, bakeries: r.bakeries.filter(bid => bid !== id) };
     await setDoc(doc(db, 'recipes', r.id), updated);
   }
   await Promise.all([loadBakeries(), loadRecipes()]);
   setStatus(`"${b.name}" slettet.`);
-  setTimeout(() => { statusMsg = ''; render(); }, 2000);
+  setTimeout(() => { state.statusMsg = ''; render(); }, 2000);
   render();
 }
 
@@ -1202,21 +1265,21 @@ function moduleNotReady() {
 async function addRecipeToSelectedBakery(recipeId) {
   const sel = document.getElementById('add-to-bakery-select');
   if (!sel) return;
-  const bakeryId = sel.value;
-  const r = recipes.find(x => x.id === recipeId);
+  const bakeryIdVal = sel.value;
+  const r = state.recipes.find(x => x.id === recipeId);
   if (!r) return;
   const newBakeries = Array.isArray(r.bakeries) ? [...r.bakeries] : [];
-  if (!newBakeries.includes(bakeryId)) newBakeries.push(bakeryId);
+  if (!newBakeries.includes(bakeryIdVal)) newBakeries.push(bakeryIdVal);
   const updated = { ...r, bakeries: newBakeries };
   await setDoc(doc(db, 'recipes', recipeId), updated);
   await loadRecipes();
   render();
 }
 
-async function removeRecipeFromBakery(recipeId, bakeryId) {
-  const r = recipes.find(x => x.id === recipeId);
+async function removeRecipeFromBakery(recipeId, bakeryIdVal) {
+  const r = state.recipes.find(x => x.id === recipeId);
   if (!r) return;
-  const newBakeries = (r.bakeries || []).filter(bid => bid !== bakeryId);
+  const newBakeries = (r.bakeries || []).filter(bid => bid !== bakeryIdVal);
   const updated = { ...r, bakeries: newBakeries };
   await setDoc(doc(db, 'recipes', recipeId), updated);
   await loadRecipes();
@@ -1227,9 +1290,8 @@ async function removeRecipeFromBakery(recipeId, bakeryId) {
 // RÅVAREPRISER
 // =====================================================================
 
-
 async function addBakeryPrice() {
-  if (!activeBakery) return;
+  if (!state.activeBakery) return;
   const navn = document.getElementById('new-price-navn').value.trim().toLowerCase();
   const prisInput = document.getElementById('new-price-pris').value;
   const pakkeInput = document.getElementById('new-price-pakke').value;
@@ -1241,30 +1303,31 @@ async function addBakeryPrice() {
   if (!hasNumberValue(pakkeInput)) { setStatus('Skriv inn pakkemengde, for eksempel 1 l, 1 kg eller 25 kg.'); return; }
   if (pakkemengde === 0) { setStatus('Pakkemengde kan ikke være 0.'); return; }
   const id = priceDocId(navn);
-  await setDoc(doc(db, 'bakeries', activeBakery, 'prices', id), {
+  await setDoc(doc(db, 'bakeries', state.activeBakery, 'prices', id), {
     navn, pris, pakkemengde, enhet, oppdatert: new Date().toISOString()
   });
-  bakeryPrices[navn] = { pris, pakkemengde, enhet, oppdatert: new Date().toISOString() };
+  state.bakeryPrices[navn] = { pris, pakkemengde, enhet, oppdatert: new Date().toISOString() };
   window._newPriceNavn = '';
-  priceSearch = '';
-  priceListSearch = navn;
+  state.priceSearch = '';
+  state.priceListSearch = navn;
   setStatus(`Pris lagret for ${navn}.`);
-  setTimeout(() => { statusMsg = ''; render(); }, 2000);
+  setTimeout(() => { state.statusMsg = ''; render(); }, 2000);
   render();
 }
 
 async function deleteBakeryPrice(navn) {
-  if (!activeBakery) return;
+  if (!state.activeBakery) return;
   const id = priceDocId(navn);
-  await deleteDoc(doc(db, 'bakeries', activeBakery, 'prices', id));
-  delete bakeryPrices[navn];
+  await deleteDoc(doc(db, 'bakeries', state.activeBakery, 'prices', id));
+  delete state.bakeryPrices[navn];
   render();
 }
-function editBakeryPrice(navn) { editingPriceName = navn; statusMsg = ''; render(); }
-function cancelEditBakeryPrice() { editingPriceName = null; statusMsg = ''; render(); }
+
+function editBakeryPrice(navn) { state.editingPriceName = navn; state.statusMsg = ''; render(); }
+function cancelEditBakeryPrice() { state.editingPriceName = null; state.statusMsg = ''; render(); }
 
 async function saveBakeryPriceEdit(navn) {
-  if (!activeBakery) return;
+  if (!state.activeBakery) return;
   const rowId = priceDocId(navn);
   const prisInput = document.getElementById(`edit-price-pris-${rowId}`)?.value;
   const pakkeInput = document.getElementById(`edit-price-pakke-${rowId}`)?.value;
@@ -1277,18 +1340,17 @@ async function saveBakeryPriceEdit(navn) {
   if (!enhet) { setStatus('Velg enhet.'); return; }
   const id = priceDocId(navn);
   const updated = { navn, pris, pakkemengde, enhet, oppdatert: new Date().toISOString() };
-  await setDoc(doc(db, 'bakeries', activeBakery, 'prices', id), updated);
-  bakeryPrices[navn] = { pris, pakkemengde, enhet, oppdatert: updated.oppdatert };
-  editingPriceName = null;
+  await setDoc(doc(db, 'bakeries', state.activeBakery, 'prices', id), updated);
+  state.bakeryPrices[navn] = { pris, pakkemengde, enhet, oppdatert: updated.oppdatert };
+  state.editingPriceName = null;
   setStatus(`Pris oppdatert for ${navn}.`);
-  setTimeout(() => { statusMsg = ''; render(); }, 2000);
+  setTimeout(() => { state.statusMsg = ''; render(); }, 2000);
   render();
 }
 
 // =====================================================================
-// DAGSPLAN-FUNKSJONER
+// DAGSPLAN
 // =====================================================================
-
 
 function startNewPlan() {
   if (!state.activeBakery) return;
@@ -1564,35 +1626,9 @@ function saveCurrentElementEdits() {
   }
 }
 
-  if (el.skaleringMode === 'faktor') {
-    const inp = document.getElementById(`scale-faktor-${idx}`);
-    if (inp) el.faktor = inp.value;
-  }
-  if (el.skaleringMode === 'vekt') {
-    const inp = document.getElementById(`scale-malvekt-${idx}`);
-    if (inp) el.malDeigvekt = inp.value;
-  }
-  if (el.skaleringMode === 'produkter') {
-    const navnInputs = document.querySelectorAll(`#product-rows-${idx} .prod-navn`);
-    const antallInputs = document.querySelectorAll(`#product-rows-${idx} .prod-antall`);
-    const vektInputs = document.querySelectorAll(`#product-rows-${idx} .prod-vekt`);
-    const newProds = [];
-    navnInputs.forEach((inp, i) => {
-      newProds.push({
-        navn: inp.value,
-        antall: antallInputs[i] ? antallInputs[i].value : '',
-        vektPerStk: vektInputs[i] ? vektInputs[i].value : ''
-      });
-    });
-    if (newProds.length > 0) el.produkter = newProds;
-  }
-}
-
 // =====================================================================
 // INGREDIENS-ADMIN
 // =====================================================================
-
-
 
 async function addIngredientRole() {
   const navn = document.getElementById('new-role-navn').value.trim();
@@ -1602,18 +1638,20 @@ async function addIngredientRole() {
   const navnLow = navn.toLowerCase();
   const id = ingredientRoleId(navn);
   await setDoc(doc(db, 'ingredient_roles', id), { navn: navnLow, rolle, tetthet });
-  ingredientRoles[navnLow] = { rolle, tetthet };
+  state.ingredientRoles[navnLow] = { rolle, tetthet };
   setStatus(`Lagt til "${navn}".`);
-  setTimeout(() => { statusMsg = ''; render(); }, 2000);
+  setTimeout(() => { state.statusMsg = ''; render(); }, 2000);
   render();
 }
+
 async function deleteIngredientRole(navn) {
   if (!confirm(`Slette "${navn}" fra lista?`)) return;
   const id = ingredientRoleId(navn);
   await deleteDoc(doc(db, 'ingredient_roles', id));
-  delete ingredientRoles[navn];
+  delete state.ingredientRoles[navn];
   render();
 }
+
 async function saveAllRoleEdits() {
   const rows = document.querySelectorAll('.role-row[data-navn]');
   let endret = 0;
@@ -1623,147 +1661,35 @@ async function saveAllRoleEdits() {
     const nyttNavn = row.querySelector('.role-navn').value.trim().toLowerCase();
     const nyRolle = row.querySelector('.role-rolle').value;
     const nyTetthet = parseTetthet(row.querySelector('.role-tetthet').value);
-    const originalData = ingredientRoles[original] || {};
+    const originalData = state.ingredientRoles[original] || {};
     if (!nyttNavn) continue;
     if (nyttNavn !== original) {
       await deleteDoc(doc(db, 'ingredient_roles', ingredientRoleId(original)));
-      delete ingredientRoles[original];
+      delete state.ingredientRoles[original];
       await setDoc(doc(db, 'ingredient_roles', ingredientRoleId(nyttNavn)), { navn: nyttNavn, rolle: nyRolle, tetthet: nyTetthet });
-      ingredientRoles[nyttNavn] = { rolle: nyRolle, tetthet: nyTetthet };
+      state.ingredientRoles[nyttNavn] = { rolle: nyRolle, tetthet: nyTetthet };
       endret++;
     } else if (nyRolle !== originalData.rolle || nyTetthet !== originalData.tetthet) {
       await setDoc(doc(db, 'ingredient_roles', ingredientRoleId(nyttNavn)), { navn: nyttNavn, rolle: nyRolle, tetthet: nyTetthet });
-      ingredientRoles[nyttNavn] = { rolle: nyRolle, tetthet: nyTetthet };
+      state.ingredientRoles[nyttNavn] = { rolle: nyRolle, tetthet: nyTetthet };
       endret++;
     }
   }
   setStatus(endret === 0 ? 'Ingen endringer.' : `Lagret. ${endret} endring${endret===1?'':'er'}.`);
-  setTimeout(() => { statusMsg = ''; render(); }, 2500);
+  setTimeout(() => { state.statusMsg = ''; render(); }, 2500);
 }
+
+// =====================================================================
+// BILDER OG SCANNING
+// =====================================================================
 
 async function handleImageFile(file) {
   if(!file) return;
   saveFormState();
   setStatus('Laster opp bilde...');
   const url=await uploadFile(file,`images/${Date.now()}_${file.name}`);
-  editData.versions[0].images=[...(editData.versions[0].images||[]),url];
+  state.editData.versions[0].images=[...(state.editData.versions[0].images||[]),url];
   setStatus(''); render();
-}
-
-function setView(v){state.view=v;state.statusMsg='';if(v==='roles')state.roleSearch='';state.validationErrors={};render();}
-function goHome(){state.activeCategory=null;state.activeBakery=null;state.bakeryPrices={};state.bakeryPlans=[];state.bakeryStandardTasks=[];state.view='home';render();}
-function openRecipe(id){state.selected=id;state.selectedVersion=0;state.view='recipe';render();}
-function selVer(i){state.selectedVersion=i;render();}
-function setStatus(s){state.statusMsg=s;render();}
-function selectCat(id){state.activeCategory=id;render();}
-
-function backFromRecipe(){
-  if (state.activeBakery) { state.view = 'bakery_recipes'; render(); }
-  else { state.view='home'; render(); }
-}
-
-function cancelEdit() {
-  if (state.activeBakery) { state.view = 'bakery_recipes'; }
-  else { state.view = 'home'; }
-  state.editData = null;
-  render();
-}
-
-function emptyIngredient() {
-  return { mengde: '', enhet: '', navn: '', merknad: '', rolle: '' };
-}
-
-function startNew() {
-  state.validationErrors = {};
-  const initialBakeries = state.activeBakery ? [state.activeBakery] : [];
-  state.editData={
-    id:`recipe_${Date.now()}`,
-    name:'', category:'', bakeries: initialBakeries,
-    versions:[{
-      date:new Date().toISOString(), notes:'',
-      ingredientsList:[ emptyIngredient() ],
-      steps:'', images:[]
-    }]
-  };
-  state.view='edit';render();
-}
-function startEdit() {
-  state.validationErrors = {};
-  if (window.recalcTimer) clearTimeout(window.recalcTimer);
-  state.editData=JSON.parse(JSON.stringify(state.recipes.find(r=>r.id===state.selected)));
-  if (!state.editData.versions[0].ingredientsList) state.editData.versions[0].ingredientsList = [ emptyIngredient() ];
-  if (!Array.isArray(state.editData.bakeries)) state.editData.bakeries = [];
-  state.editData.versions[0].ingredientsList.forEach(ing => { if (ing.rolle === undefined) ing.rolle = ''; });
-  state.view='edit';render();
-}
-function addIngredient() {
-  if (window.recalcTimer) clearTimeout(window.recalcTimer);
-  saveFormState();
-  state.editData.versions[0].ingredientsList.push(emptyIngredient());
-  render();
-}
-function removeIngredient(idx) {
-  if (window.recalcTimer) clearTimeout(window.recalcTimer);
-  saveFormState();
-  state.editData.versions[0].ingredientsList.splice(idx, 1);
-  if (state.editData.versions[0].ingredientsList.length === 0) state.editData.versions[0].ingredientsList.push(emptyIngredient());
-  render();
-}
-function saveFormState() {
-  const n=document.getElementById('e-name');
-  const c=document.getElementById('e-cat');
-  const s=document.getElementById('e-steps');
-  const nt=document.getElementById('e-notes');
-  if(n)editData.name=n.value;
-  if(c)editData.category=c.value;
-  if(s)editData.versions[0].steps=s.value;
-  if(nt)editData.versions[0].notes=nt.value;
-  const checkedBakeries = [];
-  bakeries.forEach(b => {
-    const cb = document.getElementById('bk-' + b.id);
-    if (cb && cb.checked) checkedBakeries.push(b.id);
-  });
-  editData.bakeries = checkedBakeries;
-  const container = document.getElementById('ing-container');
-  if (container) {
-    const rows = container.querySelectorAll('.ing-row');
-    const merknader = container.querySelectorAll('.ing-merknad-input');
-    const newList = [];
-    rows.forEach((row, i) => {
-      const mengdeStr = row.querySelector('.ing-mengde').value.trim();
-      const enhet = row.querySelector('.ing-enhet').value.trim();
-      const navn = row.querySelector('.ing-navn').value.trim();
-      const rolle = row.querySelector('.ing-rolle').value;
-      const merknad = merknader[i] ? merknader[i].value.trim() : '';
-      let mengde = null;
-      if (mengdeStr !== '') {
-        const num = parseFloat(mengdeStr.replace(',', '.'));
-        mengde = isNaN(num) ? mengdeStr : num;
-      }
-      const finalRolle = rolle || lookupRole(navn);
-      newList.push({ mengde, enhet, navn, merknad, rolle: finalRolle });
-    });
-    editData.versions[0].ingredientsList = newList;
-  }
-}
-async function handleSave() {
-  saveFormState();
-  state.validationErrors = {};
-  const missing = [];
-  if (!state.editData.name.trim()) { missing.push('Navn'); state.validationErrors.name = true; }
-  if (!state.editData.category) { missing.push('Kategori'); state.validationErrors.category = true; }
-  if (missing.length > 0) {
-    setStatus(`${missing.join(' og ')} må fylles inn før oppskriften kan lagres.`);
-    render(); return;
-  }
-  state.editData.versions[0].ingredientsList = state.editData.versions[0].ingredientsList
-    .filter(ing => ing.navn || ing.mengde || ing.enhet || ing.merknad);
-  state.loading=true;setStatus('Lagrer...');
-  await saveRecipeToDb(state.editData);
-  state.loading=false;
-  if (state.activeBakery) { state.view='bakery_recipes'; }
-  else { state.view='home'; }
-  state.editData=null;state.validationErrors={};render();
 }
 
 function toBase64(file){
@@ -1787,9 +1713,10 @@ function toBase64(file){
     img.src=URL.createObjectURL(file);
   });
 }
+
 async function scanRecipe(file) {
   if(!file) return;
-  if(!anthropicKey){setStatus('Legg inn Claude API-nøkkel i innstillinger først.');return;}
+  if(!state.anthropicKey){setStatus('Legg inn Claude API-nøkkel i innstillinger først.');return;}
   saveFormState();setStatus('Leser oppskrift fra bilde...');
   const b64=await toBase64(file);
   const promptText = `Dette er et bilde av en oppskrift. Returner KUN gyldig JSON i nøyaktig dette formatet:
@@ -1816,7 +1743,7 @@ Svar KUN med JSON, ingen annen tekst.`;
   try {
     const res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'x-api-key':anthropicKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
+      headers:{'x-api-key':state.anthropicKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
       body:JSON.stringify({
         model:'claude-haiku-4-5-20251001',
         max_tokens:2048,
@@ -1830,9 +1757,9 @@ Svar KUN med JSON, ingen annen tekst.`;
     const rawText = data.content?.[0]?.text || '{}';
     const cleaned = rawText.replace(/```json|```/g,'').trim();
     const parsed = JSON.parse(cleaned);
-    if (parsed.name) editData.name = parsed.name;
+    if (parsed.name) state.editData.name = parsed.name;
     if (Array.isArray(parsed.ingredientsList)) {
-      editData.versions[0].ingredientsList = parsed.ingredientsList.map(ing => {
+      state.editData.versions[0].ingredientsList = parsed.ingredientsList.map(ing => {
         const navn = ing.navn || '';
         return {
           mengde: (ing.mengde === null || ing.mengde === undefined) ? null : ing.mengde,
@@ -1841,8 +1768,8 @@ Svar KUN med JSON, ingen annen tekst.`;
         };
       });
     }
-    if (parsed.steps) editData.versions[0].steps = parsed.steps;
-    if (parsed.notes) editData.versions[0].notes = parsed.notes;
+    if (parsed.steps) state.editData.versions[0].steps = parsed.steps;
+    if (parsed.notes) state.editData.versions[0].notes = parsed.notes;
     setStatus('Oppskrift lest! Sjekk og juster feltene.');
     render();
   } catch(e) {
@@ -1851,7 +1778,9 @@ Svar KUN med JSON, ingen annen tekst.`;
   }
 }
 
-
+// =====================================================================
+// AUTH-LISTENER
+// =====================================================================
 
 onAuthStateChanged(auth, async user => {
   if (user) {
@@ -1891,6 +1820,10 @@ onAuthStateChanged(auth, async user => {
   }
 });
 
+// =====================================================================
+// EKSPONERING TIL window FOR onclick-HANDLERS I HTML
+// =====================================================================
+
 Object.assign(window,{
   doGoogleLogin, doEmailLogin, doSignOut, setView, goHome, openRecipe, selVer, setStatus, selectCat,
   backFromRecipe, cancelEdit, startNew, startEdit, handleSave, confirmDelete,
@@ -1906,11 +1839,7 @@ Object.assign(window,{
   markPlanGjennomført, markPlanPlanlagt,
   addRecipeToPlan, addNewStandardTask, deleteStandardTask, addCheckedTasksToPlan,
   toggleElementDone, removeElement, editElement, cancelEditElement,
-  setScaleMode, updateScaleField, addProductRow, removeProductRow,
-  loginMode
+  setScaleMode, updateScaleField, addProductRow, removeProductRow
 });
-Object.defineProperty(window,'loginMode',{get:()=>loginMode,set:v=>loginMode=v});
-
-window.state = state; window.renderRef = renderRef;
 
 renderRef.fn = render;
