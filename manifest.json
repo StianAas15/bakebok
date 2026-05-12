@@ -1,6 +1,6 @@
 {
-  "name": "Bakebok",
-  "short_name": "Bakebok",
+  "name": "Bakeboka",
+  "short_name": "Bakeboka",
   "start_url": "/bakebok/",
   "scope": "/bakebok/",
   "display": "standalone",
