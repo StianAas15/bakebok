@@ -68,7 +68,7 @@ function loginView() {
     <div class="login-wrap">
       <div style="text-align:center;margin-bottom:2rem">
         <div style="font-size:48px;margin-bottom:8px">🍞</div>
-        <h1>Bakebok</h1>
+        <h1>Bakeboka</h1>
         <p class="muted" style="margin-top:4px">Din digitale oppskriftsbok</p>
       </div>
       <div class="card">
@@ -136,7 +136,7 @@ function homeView() {
     }).join('')}` : '';
 
   return `${hero}
-    <div class="topbar no-print" style="padding-top:0"><h1>Bakebok</h1>
+    <div class="topbar no-print" style="padding-top:0"><h1>Bakeboka</h1>
     <div class="gap">
       <button class="btn" onclick="setView('settings')">Innstillinger</button>
       <button class="btn-primary" onclick="startNew()">+ Ny</button>
