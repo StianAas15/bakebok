@@ -484,7 +484,7 @@ function renderPlanElement(el, idx, isFrozen) {
       <div class="plan-element ${doneClass}">
         <div class="plan-element-head">
           <input type="checkbox" class="plan-element-checkbox" ${el.gjort?'checked':''} ${isFrozen?'disabled':''} onchange="toggleElementDone(${idx})">
-          <div class="plan-element-name ${doneClass}">📝 ${el.navn}</div>
+          <div class="plan-element-name ${doneClass}">${el.navn}</div>
           ${!isFrozen ? `<button class="plan-element-remove no-print" onclick="removeElement(${idx})">×</button>` : ''}
         </div>
       </div>`;
