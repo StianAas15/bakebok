@@ -431,7 +431,7 @@ function bakeryPlanEditView() {
       `).join('');
 
   return `
-  <div class="topbar no-print"><button class="btn" onclick="commitAnd(exitPlanEdit)">← Dagsplaner</button>
+    <div class="topbar no-print"><button class="btn" onclick="commitAnd(exitPlanEdit)">← Dagsplaner</button>
     <div class="gap">
       <button class="btn no-print" onclick="commitAnd(printPlan)">🖨 Skriv ut</button>
       ${!isFrozen ? `<button class="btn" onclick="commitAnd(markPlanGjennomført)">Marker gjennomført</button>` : `<button class="btn" onclick="commitAnd(markPlanPlanlagt)">Endre til planlagt</button>`}
@@ -439,90 +439,7 @@ function bakeryPlanEditView() {
       <button class="btn-danger" onclick="commitAnd(deletePlan)">Slett</button>
     </div></div>
 
-    function commitAnd(action) {
-  // Hent og lagre alle pågående endringer i input-felter til state først.
-  // Dette fanger opp tilfeller der brukeren skriver i et felt og klikker
-  // direkte på en knapp uten å trigge blur først.
-  flushPlanInputs();
-  savePlan();
-  render();
-  // Kjør så handlingen (skriv ut, gå tilbake, osv.)
-  if (typeof action === 'function') {
-    setTimeout(action, 0);
-  }
-}
-
-function flushPlanInputs() {
-  // Skann editor-feltene og lagre verdiene til state
-  if (!state.activePlan || state.editingElementIdx === null) return;
-  const idx = state.editingElementIdx;
-  const el = state.activePlan.elementer[idx];
-  if (!el) return;
-
-  if (el.skaleringMode === 'faktor') {
-    const inp = document.getElementById(`scale-faktor-${idx}`);
-    if (inp) el.faktor = inp.value;
-  }
-  if (el.skaleringMode === 'produkter') {
-    const navnInputs = document.querySelectorAll(`#product-rows-${idx} .prod-navn`);
-    const antallInputs = document.querySelectorAll(`#product-rows-${idx} .prod-antall`);
-    const vektInputs = document.querySelectorAll(`#product-rows-${idx} .prod-vekt`);
-    if (!el.produkter) el.produkter = [];
-    navnInputs.forEach((inp, i) => {
-      if (!el.produkter[i]) el.produkter[i] = { navn: '', antall: '', vektPerStk: '' };
-      el.produkter[i].navn = inp.value;
-      el.produkter[i].antall = antallInputs[i] ? antallInputs[i].value : '';
-      el.produkter[i].vektPerStk = vektInputs[i] ? vektInputs[i].value : '';
-    });
-  }
-}
-
-function printPlan() {
-  window.print();
-}
-function bakeryPlanEditView() {
-  const b = state.bakeries.find(x => x.id === state.activeBakery);
-  if (!b) { state.view = 'home'; state.activeBakery = null; return homeView(); }
-  if (!state.activePlan) { state.view = 'bakery_plans'; return bakeryPlansView(); }
-
-  const isFrozen = state.activePlan.status === 'gjennomført';
-  const elementer = state.activePlan.elementer || [];
-
-  const elementsHtml = elementer.map((el, idx) => renderPlanElement(el, idx, isFrozen)).join('');
-
-  const costData = calcPlanCosts(state.activePlan, isFrozen);
-  const costSummaryHtml = `
-    <div class="day-cost-summary no-print">
-      <div class="day-cost-total">Total råvarekostnad: ${fmtKr(costData.totalCost)}</div>
-      ${costData.productCosts.length > 0 ? `
-        <div style="font-weight:500;margin-bottom:4px;font-size:13px">Per produkt:</div>
-        ${costData.productCosts.map(pc => `
-          <div class="day-cost-product-row">
-            <span>${pc.productName} (${pc.antall} stk × ${pc.vektPerStk} g)</span>
-            <span><strong>${fmtKr(pc.kostPerStk)}/stk</strong> · ${fmtKr(pc.totalKost)} totalt</span>
-          </div>
-        `).join('')}
-      ` : '<div class="muted">Ingen produkter er definert.</div>'}
-      ${costData.missingPriceWarnings.length > 0 ? `
-        <div class="muted" style="margin-top:8px;color:#856404">⚠ Manglende priser: ${costData.missingPriceWarnings.join(' · ')}</div>
-      ` : ''}
-    </div>`;
-
-  const bakeryRecipes = state.recipes.filter(r => Array.isArray(r.bakeries) && r.bakeries.includes(state.activeBakery));
-  const recipeOpts = bakeryRecipes
-    .sort((a, b) => a.name.localeCompare(b.name, 'nb'))
-    .map(r => `<option value="${r.id}">${r.name}</option>`).join('');
-
-  const usedTaskNames = elementer.filter(e => e.type === 'oppgave').map(e => e.navn);
-  const availableStandardTasks = state.bakeryStandardTasks.filter(t => !usedTaskNames.includes(t.navn));
-
-  const taskCheckboxes = availableStandardTasks.length === 0
-    ? `<p class="muted" style="margin-bottom:6px">Ingen standardoppgaver registrert ennå. Skriv inn ny oppgave under for å legge til.</p>`
-    : availableStandardTasks.map(t => `
-        <div class="standard-task-row">
-          <input type="checkbox" id="task-${t.id}" data-task="${t.navn.replace(/"/g, '&quot;')}">
-          <label for="task-${t.id}">${t.n
- <p class="muted no-print" style="margin-bottom:4px">${b.name}</p>
+    <p class="muted no-print" style="margin-bottom:4px">${b.name}</p>
     <h2 style="margin-bottom:4px">
       <span>Dagsplan</span>
       <span class="print-only print-plan-date">${fmtPrintDate(state.activePlan.dato)}</span>
@@ -567,6 +484,43 @@ function bakeryPlanEditView() {
     ${costSummaryHtml}
 
     ${state.statusMsg?`<p class="status no-print">${state.statusMsg}</p>`:''}`;
+}
+
+function commitAnd(action) {
+  flushPlanInputs();
+  savePlan();
+  render();
+  if (typeof action === 'function') {
+    setTimeout(action, 0);
+  }
+}
+
+function flushPlanInputs() {
+  if (!state.activePlan || state.editingElementIdx === null) return;
+  const idx = state.editingElementIdx;
+  const el = state.activePlan.elementer[idx];
+  if (!el) return;
+
+  if (el.skaleringMode === 'faktor') {
+    const inp = document.getElementById(`scale-faktor-${idx}`);
+    if (inp) el.faktor = inp.value;
+  }
+  if (el.skaleringMode === 'produkter') {
+    const navnInputs = document.querySelectorAll(`#product-rows-${idx} .prod-navn`);
+    const antallInputs = document.querySelectorAll(`#product-rows-${idx} .prod-antall`);
+    const vektInputs = document.querySelectorAll(`#product-rows-${idx} .prod-vekt`);
+    if (!el.produkter) el.produkter = [];
+    navnInputs.forEach((inp, i) => {
+      if (!el.produkter[i]) el.produkter[i] = { navn: '', antall: '', vektPerStk: '' };
+      el.produkter[i].navn = inp.value;
+      el.produkter[i].antall = antallInputs[i] ? antallInputs[i].value : '';
+      el.produkter[i].vektPerStk = vektInputs[i] ? vektInputs[i].value : '';
+    });
+  }
+}
+
+function printPlan() {
+  window.print();
 }
 
 function renderPlanElement(el, idx, isFrozen) {
