@@ -502,11 +502,20 @@ function renderPlanElement(el, idx, isFrozen) {
       </div>`;
   }
 
+ // Skalering-info-tekst
   let modeLabel = '';
-  if (el.skaleringMode === 'faktor') modeLabel = `${asNumber(el.faktor).toString().replace('.', ',')}×`;
+  if (el.skaleringMode === 'faktor') {
+    const f = asNumber(el.faktor);
+    if (f !== 1) modeLabel = `${f.toString().replace('.', ',')}×`;
+  }
   else if (el.skaleringMode === 'vekt') modeLabel = `${Math.round(info.scaledDeigvekt)} g deig`;
   else if (el.skaleringMode === 'produkter') {
-    const prods = (el.produkter || []).map(p => `${p.antall}× ${p.navn || 'produkt'} à ${p.vektPerStk} g`).join(', ');
+    const validProds = (el.produkter || []).filter(p =>
+      asNumber(p.antall) > 0 && asNumber(p.vektPerStk) > 0
+    );
+    const prods = validProds.map(p =>
+      `${p.antall}× ${p.navn || 'produkt'} à ${p.vektPerStk} g`
+    ).join(', ');
     modeLabel = prods || `${Math.round(info.scaledDeigvekt)} g deig`;
   }
 
