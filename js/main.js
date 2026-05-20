@@ -31,6 +31,15 @@ import {
 
 function allCategories() { return [...DEFAULT_CATEGORIES, ...state.customCategories]; }
 function getCatName(id) { return allCategories().find(c=>c.id===id)?.name || id; }
+function fmtPrintDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(-2);
+  return `${dd}.${mm}.${yy}`;
+}
 
 // =====================================================================
 // RENDER
@@ -430,9 +439,11 @@ function bakeryPlanEditView() {
       <button class="btn-danger" onclick="deletePlan()">Slett</button>
     </div></div>
 
-    <p class="muted" style="margin-bottom:4px">${b.name}</p>
-    <h2 style="margin-bottom:4px">Dagsplan</h2>
-    <p class="print-only" style="font-size:14px;margin-bottom:12px"><strong>${fmtDateShort(state.activePlan.dato)}</strong></p>
+ <p class="muted no-print" style="margin-bottom:4px">${b.name}</p>
+    <h2 style="margin-bottom:4px">
+      <span>Dagsplan</span>
+      <span class="print-only print-plan-date">${fmtPrintDate(state.activePlan.dato)}</span>
+    </h2>
 
     <div class="card no-print">
       <label>Dato</label>
