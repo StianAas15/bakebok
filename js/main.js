@@ -1907,7 +1907,7 @@ Object.assign(window,{
   markPlanGjennomført, markPlanPlanlagt,
   addRecipeToPlan, addNewStandardTask, deleteStandardTask, addCheckedTasksToPlan,
   toggleElementDone, removeElement, editElement, cancelEditElement,
-  setScaleMode, updateScaleField, updateProductField, commitPlanEdit, commitAnd, printPlan, addProductRow, removeProductRow,
+  setScaleMode, updateScaleField, updateProductField, commitAnd, printPlan, addProductRow, removeProductRow,
 });
 
 renderRef.fn = render;
