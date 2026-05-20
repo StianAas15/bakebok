@@ -575,9 +575,9 @@ function renderPlanElementEditor(el, idx, baseDeigvekt) {
 
   const produktRows = produkter.map((p, pi) => `
     <div class="product-row">
-      <input type="text" class="prod-navn" data-idx="${pi}" placeholder="Navn (f.eks. Loff)" value="${p.navn || ''}">
-      <input type="text" class="prod-antall" data-idx="${pi}" placeholder="Antall" value="${p.antall || ''}">
-      <input type="text" class="prod-vekt" data-idx="${pi}" placeholder="g/stk" value="${p.vektPerStk || ''}">
+      <input type="text" class="prod-navn" data-idx="${pi}" placeholder="Navn (f.eks. Loff)" value="${p.navn || ''}" oninput="updateProductField(${idx}, ${pi}, 'navn', this.value)">
+      <input type="text" class="prod-antall" data-idx="${pi}" placeholder="Antall" value="${p.antall || ''}" oninput="updateProductField(${idx}, ${pi}, 'antall', this.value)">
+      <input type="text" class="prod-vekt" data-idx="${pi}" placeholder="g/stk" value="${p.vektPerStk || ''}" oninput="updateProductField(${idx}, ${pi}, 'vektPerStk', this.value)">
       <button onclick="removeProductRow(${idx}, ${pi})" title="Fjern">×</button>
     </div>
   `).join('');
@@ -1598,6 +1598,18 @@ function updateScaleField(idx, field, value) {
   }, 500);
 }
 
+function updateProductField(idx, prodIdx, field, value) {
+  if (!state.activePlan || !state.activePlan.elementer[idx]) return;
+  if (!state.activePlan.elementer[idx].produkter) state.activePlan.elementer[idx].produkter = [];
+  if (!state.activePlan.elementer[idx].produkter[prodIdx]) return;
+  state.activePlan.elementer[idx].produkter[prodIdx][field] = value;
+  clearTimeout(window._planRecalcTimer);
+  window._planRecalcTimer = setTimeout(() => {
+    savePlan();
+    render();
+  }, 500);
+}
+
 function addProductRow(idx) {
   saveCurrentElementEdits();
   if (!state.activePlan || !state.activePlan.elementer[idx]) return;
@@ -1858,7 +1870,7 @@ Object.assign(window,{
   markPlanGjennomført, markPlanPlanlagt,
   addRecipeToPlan, addNewStandardTask, deleteStandardTask, addCheckedTasksToPlan,
   toggleElementDone, removeElement, editElement, cancelEditElement,
-  setScaleMode, updateScaleField, addProductRow, removeProductRow
+  setScaleMode, updateScaleField, updateProductField, addProductRow, removeProductRow,
 });
 
 renderRef.fn = render;
