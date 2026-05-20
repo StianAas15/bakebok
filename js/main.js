@@ -1533,7 +1533,6 @@ function toggleElementDone(idx) {
 function removeElement(idx) {
   if (!state.activePlan || !state.activePlan.elementer) return;
   if (state.activePlan.status === 'gjennomført') return;
-  if (!confirm('Fjerne dette elementet fra planen?')) return;
   state.activePlan.elementer.splice(idx, 1);
   if (state.editingElementIdx === idx) state.editingElementIdx = null;
   savePlan();
