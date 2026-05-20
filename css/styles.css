@@ -159,16 +159,37 @@ img.recipe-img { width: 100%; border-radius: 8px; margin-bottom: 8px; }
 .print-checkbox { display: inline-block; width: 14px; height: 14px; border: 1px solid #333; vertical-align: middle; margin-right: 8px; }
 
 @media print {
-  .print-only { display: block !important; }
+  .print-only { display: inline !important; }
   .no-print { display: none !important; }
-  body { background: #fff; }
+  body { background: #fff; font-size: 11px; }
   .app { padding: 0; }
   .card { border: none; padding: 0; margin-bottom: 1rem; }
-  pre { font-size: 12px; }
+  pre { font-size: 11px; }
   img.recipe-img { max-height: 180px; width: auto; object-fit: cover; }
-  .plan-element { background: #fff !important; border: 1px solid #ddd; padding: 8px; margin-bottom: 8px; }
+
+  /* Dagsplan – kompakt utskrift */
+  h2 { margin-top: 1.5rem; }
+  .print-plan-date { font-weight: 400; margin-left: 8px; font-size: 0.85em; }
+
+  .plan-element {
+    background: #fff !important;
+    border: 1px solid #ddd;
+    padding: 4px 6px;
+    margin-bottom: 4px;
+    page-break-inside: avoid;
+  }
   .plan-element.done { background: #fff !important; opacity: 1; }
   .plan-element-name.done { text-decoration: none; }
+  .plan-element-head { margin-bottom: 2px; }
+  .plan-element-name { font-size: 12px; }
+  .plan-element-meta { font-size: 10px; margin-left: 22px; margin-bottom: 2px; }
+  .plan-element-ingredients { font-size: 10px; margin-left: 22px; word-spacing: 2px; }
+
+  .plan-element-checkbox {
+    width: 11px !important;
+    height: 11px !important;
+    margin-right: 4px;
+  }
+
   .day-cost-summary { background: #f5f5f5 !important; border: 1px solid #ddd; }
-  h2 { margin-top: 2rem; }
 }
