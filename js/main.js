@@ -492,7 +492,7 @@ function renderPlanElement(el, idx, isFrozen) {
 
   if (el.type === 'oppgave') {
     return `
-      <div class="plan-element ${doneClass}">
+      <div class="plan-element plan-task ${doneClass}">
         <div class="plan-element-head">
           <input type="checkbox" class="plan-element-checkbox" ${el.gjort?'checked':''} ${isFrozen?'disabled':''} onchange="toggleElementDone(${idx})">
           <div class="plan-element-name ${doneClass}">${el.navn}</div>
