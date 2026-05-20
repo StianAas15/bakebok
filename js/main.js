@@ -431,13 +431,55 @@ function bakeryPlanEditView() {
       `).join('');
 
   return `
-    <div class="topbar no-print"><button class="btn" onclick="exitPlanEdit()">← Dagsplaner</button>
+  <div class="topbar no-print"><button class="btn" onclick="commitAnd(exitPlanEdit)">← Dagsplaner</button>
     <div class="gap">
-      <button class="btn no-print" onclick="window.print()">🖨 Skriv ut</button>
-      ${!isFrozen ? `<button class="btn" onclick="markPlanGjennomført()">Marker gjennomført</button>` : `<button class="btn" onclick="markPlanPlanlagt()">Endre til planlagt</button>`}
-      <button class="btn" onclick="copyPlan()">📋 Kopier plan</button>
-      <button class="btn-danger" onclick="deletePlan()">Slett</button>
+      <button class="btn no-print" onclick="commitAnd(printPlan)">🖨 Skriv ut</button>
+      ${!isFrozen ? `<button class="btn" onclick="commitAnd(markPlanGjennomført)">Marker gjennomført</button>` : `<button class="btn" onclick="commitAnd(markPlanPlanlagt)">Endre til planlagt</button>`}
+      <button class="btn" onclick="commitAnd(copyPlan)">📋 Kopier plan</button>
+      <button class="btn-danger" onclick="commitAnd(deletePlan)">Slett</button>
     </div></div>
+
+    function commitAnd(action) {
+  // Hent og lagre alle pågående endringer i input-felter til state først.
+  // Dette fanger opp tilfeller der brukeren skriver i et felt og klikker
+  // direkte på en knapp uten å trigge blur først.
+  flushPlanInputs();
+  savePlan();
+  render();
+  // Kjør så handlingen (skriv ut, gå tilbake, osv.)
+  if (typeof action === 'function') {
+    setTimeout(action, 0);
+  }
+}
+
+function flushPlanInputs() {
+  // Skann editor-feltene og lagre verdiene til state
+  if (!state.activePlan || state.editingElementIdx === null) return;
+  const idx = state.editingElementIdx;
+  const el = state.activePlan.elementer[idx];
+  if (!el) return;
+
+  if (el.skaleringMode === 'faktor') {
+    const inp = document.getElementById(`scale-faktor-${idx}`);
+    if (inp) el.faktor = inp.value;
+  }
+  if (el.skaleringMode === 'produkter') {
+    const navnInputs = document.querySelectorAll(`#product-rows-${idx} .prod-navn`);
+    const antallInputs = document.querySelectorAll(`#product-rows-${idx} .prod-antall`);
+    const vektInputs = document.querySelectorAll(`#product-rows-${idx} .prod-vekt`);
+    if (!el.produkter) el.produkter = [];
+    navnInputs.forEach((inp, i) => {
+      if (!el.produkter[i]) el.produkter[i] = { navn: '', antall: '', vektPerStk: '' };
+      el.produkter[i].navn = inp.value;
+      el.produkter[i].antall = antallInputs[i] ? antallInputs[i].value : '';
+      el.produkter[i].vektPerStk = vektInputs[i] ? vektInputs[i].value : '';
+    });
+  }
+}
+
+function printPlan() {
+  window.print();
+}
 
  <p class="muted no-print" style="margin-bottom:4px">${b.name}</p>
     <h2 style="margin-bottom:4px">
@@ -1870,7 +1912,7 @@ Object.assign(window,{
   markPlanGjennomført, markPlanPlanlagt,
   addRecipeToPlan, addNewStandardTask, deleteStandardTask, addCheckedTasksToPlan,
   toggleElementDone, removeElement, editElement, cancelEditElement,
-  setScaleMode, updateScaleField, updateProductField, addProductRow, removeProductRow,
+  setScaleMode, updateScaleField, updateProductField, commitPlanEdit, commitAnd, printPlan, addProductRow, removeProductRow,
 });
 
 renderRef.fn = render;
