@@ -531,6 +531,7 @@ function printPlan() {
 function renderPlanElement(el, idx, isFrozen) {
   const isEditing = state.editingElementIdx === idx && !isFrozen;
   const doneClass = el.gjort ? 'done' : '';
+  const moveBtns = isFrozen ? '' : `<button class="plan-element-move no-print" onclick="moveElement(${idx}, -1)" title="Flytt opp">▲</button><button class="plan-element-move no-print" onclick="moveElement(${idx}, 1)" title="Flytt ned">▼</button>`;
 
   if (el.type === 'oppgave') {
     return `
@@ -538,7 +539,7 @@ function renderPlanElement(el, idx, isFrozen) {
         <div class="plan-element-head">
           <input type="checkbox" class="plan-element-checkbox" ${el.gjort?'checked':''} ${isFrozen?'disabled':''} onchange="toggleElementDone(${idx})">
           <div class="plan-element-name ${doneClass}">${el.navn}</div>
-          ${!isFrozen ? `<button class="plan-element-remove no-print" onclick="removeElement(${idx})">×</button>` : ''}
+          ${moveBtns}${!isFrozen ? `<button class="plan-element-remove no-print" onclick="removeElement(${idx})">×</button>` : ''}
         </div>
       </div>`;
   }
@@ -550,7 +551,7 @@ function renderPlanElement(el, idx, isFrozen) {
         <div class="plan-element-head">
           <input type="checkbox" class="plan-element-checkbox" ${el.gjort?'checked':''} ${isFrozen?'disabled':''} onchange="toggleElementDone(${idx})">
           <div class="plan-element-name">⚠ Oppskrift ikke funnet (slettet?)</div>
-          ${!isFrozen ? `<button class="plan-element-remove no-print" onclick="removeElement(${idx})">×</button>` : ''}
+        ${moveBtns}${!isFrozen ? `<button class="plan-element-remove no-print" onclick="removeElement(${idx})">×</button>` : ''}
         </div>
       </div>`;
   }
@@ -598,7 +599,7 @@ function renderPlanElement(el, idx, isFrozen) {
       <div class="plan-element-head">
         <input type="checkbox" class="plan-element-checkbox" ${el.gjort?'checked':''} ${isFrozen?'disabled':''} onchange="toggleElementDone(${idx})">
         <div class="plan-element-name ${doneClass}">${info.name}</div>
-        ${!isFrozen ? `<button class="plan-element-remove no-print" onclick="removeElement(${idx})">×</button>` : ''}
+        ${moveBtns}${!isFrozen ? `<button class="plan-element-remove no-print" onclick="removeElement(${idx})">×</button>` : ''}
       </div>
       <div class="plan-element-meta">${modeLabel}${deigvektStr && el.skaleringMode !== 'vekt' ? ' · ' + deigvektStr : ''}</div>
       <div class="plan-element-ingredients">${ingLine}</div>
@@ -1600,6 +1601,19 @@ function removeElement(idx) {
   savePlan();
   render();
 }
+function moveElement(idx, retning) {
+  if (!state.activePlan || !state.activePlan.elementer) return;
+  if (state.activePlan.status === 'gjennomført') return;
+  const nyIdx = idx + retning;
+  if (nyIdx < 0 || nyIdx >= state.activePlan.elementer.length) return;
+  const el = state.activePlan.elementer;
+  [el[idx], el[nyIdx]] = [el[nyIdx], el[idx]];
+  // Hvis et element redigeres, følg det
+  if (state.editingElementIdx === idx) state.editingElementIdx = nyIdx;
+  else if (state.editingElementIdx === nyIdx) state.editingElementIdx = idx;
+  savePlan();
+  render();
+}
 
 function editElement(idx) {
   saveCurrentElementEdits();
@@ -1901,7 +1915,7 @@ Object.assign(window,{
   startNewPlan, openPlan, exitPlanEdit, savePlan, deletePlan, copyPlan,
   markPlanGjennomført, markPlanPlanlagt,
   addRecipeToPlan, addNewStandardTask, deleteStandardTask, addCheckedTasksToPlan,
-  toggleElementDone, removeElement, editElement, cancelEditElement,
+  toggleElementDone, removeElement, moveElement, editElement, cancelEditElement,
  setScaleMode, updateScaleField, updateProductField, commitPlanEdit, commitAnd, printPlan, addProductRow, removeProductRow,
 });
 
