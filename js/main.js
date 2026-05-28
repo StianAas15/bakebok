@@ -486,6 +486,11 @@ function bakeryPlanEditView() {
     ${state.statusMsg?`<p class="status no-print">${state.statusMsg}</p>`:''}`;
 }
 
+function commitPlanEdit() {
+  savePlan();
+  render();
+}
+
 function commitAnd(action) {
   flushPlanInputs();
   savePlan();
@@ -610,7 +615,7 @@ function renderPlanElementEditor(el, idx, baseDeigvekt) {
   const mode = el.skaleringMode || 'faktor';
   const produkter = el.produkter || [{ navn: '', antall: '', vektPerStk: '' }];
 
-  const produktRows = produkter.map((p, pi) => `
+ const produktRows = produkter.map((p, pi) => `
     <div class="product-row">
       <input type="text" class="prod-navn" data-idx="${pi}" placeholder="Navn (f.eks. Loff)" value="${p.navn || ''}" oninput="updateProductField(${idx}, ${pi}, 'navn', this.value)">
       <input type="text" class="prod-antall" data-idx="${pi}" placeholder="Antall" value="${p.antall || ''}" oninput="updateProductField(${idx}, ${pi}, 'antall', this.value)">
@@ -629,7 +634,7 @@ function renderPlanElementEditor(el, idx, baseDeigvekt) {
 
       ${mode === 'faktor' ? `
         <label>Multipliser grunnoppskriftens deigvekt (${baseDeigvekt > 0 ? Math.round(baseDeigvekt) : '?'} g) med</label>
-        <input type="text" id="scale-faktor-${idx}" value="${el.faktor || ''}" placeholder="F.eks. 1,5" oninput="updateScaleField(${idx}, 'faktor', this.value)">
+      <input type="text" id="scale-faktor-${idx}" value="${el.faktor || ''}" placeholder="F.eks. 1,5" oninput="updateScaleField(${idx}, 'faktor', this.value)" onblur="commitPlanEdit()">
       ` : ''}
 
       ${mode === 'produkter' ? `
@@ -1897,7 +1902,7 @@ Object.assign(window,{
   markPlanGjennomført, markPlanPlanlagt,
   addRecipeToPlan, addNewStandardTask, deleteStandardTask, addCheckedTasksToPlan,
   toggleElementDone, removeElement, editElement, cancelEditElement,
-  setScaleMode, updateScaleField, updateProductField, commitAnd, printPlan, addProductRow, removeProductRow,
+ setScaleMode, updateScaleField, updateProductField, commitPlanEdit, commitAnd, printPlan, addProductRow, removeProductRow,
 });
 
 renderRef.fn = render;
