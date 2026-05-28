@@ -1628,11 +1628,6 @@ function setScaleMode(idx, mode) {
 function updateScaleField(idx, field, value) {
   if (!state.activePlan || !state.activePlan.elementer[idx]) return;
   state.activePlan.elementer[idx][field] = value;
-  clearTimeout(window._planRecalcTimer);
-  window._planRecalcTimer = setTimeout(() => {
-    savePlan();
-    render();
-  }, 500);
 }
 
 function updateProductField(idx, prodIdx, field, value) {
@@ -1640,11 +1635,6 @@ function updateProductField(idx, prodIdx, field, value) {
   if (!state.activePlan.elementer[idx].produkter) state.activePlan.elementer[idx].produkter = [];
   if (!state.activePlan.elementer[idx].produkter[prodIdx]) return;
   state.activePlan.elementer[idx].produkter[prodIdx][field] = value;
-  clearTimeout(window._planRecalcTimer);
-  window._planRecalcTimer = setTimeout(() => {
-    savePlan();
-    render();
-  }, 500);
 }
 
 function addProductRow(idx) {
