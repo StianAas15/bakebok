@@ -998,8 +998,8 @@ function bindLogin() {
 function bindEdit() {
   document.getElementById('img-input').addEventListener('change', e=>handleImageFile(e.target.files[0]));
   document.getElementById('cam-input').addEventListener('change', e=>handleImageFile(e.target.files[0]));
-  document.getElementById('scan-input').addEventListener('change', e=>scanRecipe(e.target.files[0]));
-  document.getElementById('scan-cam').addEventListener('change', e=>scanRecipe(e.target.files[0]));
+  document.getElementById('scan-input').addEventListener('change', e=>scanRecipe(Array.from(e.target.files)));
+  document.getElementById('scan-cam').addEventListener('change', e=>scanRecipe(Array.from(e.target.files)));
   const container = document.getElementById('ing-container');
   if (container) {
     container.addEventListener('input', (e) => {
@@ -1828,12 +1828,12 @@ function toBase64(file){
   });
 }
 
-async function scanRecipe(file) {
-  if(!file) return;
+async function scanRecipe(files) {
+  if(!files || files.length===0) return;
   if(!state.anthropicKey){setStatus('Legg inn Claude API-nøkkel i innstillinger først.');return;}
-  saveFormState();setStatus('Leser oppskrift fra bilde...');
-  const b64=await toBase64(file);
-  const promptText = `Dette er et bilde av en oppskrift. Returner KUN gyldig JSON i nøyaktig dette formatet:
+  saveFormState();setStatus(`Leser oppskrift fra ${files.length} bilde${files.length!==1?'r':''}...`);
+  const b64List = await Promise.all(files.map(f => toBase64(f)));
+  const promptText = `Dette er ${files.length>1?`${files.length} bilder`:'et bilde'} av en oppskrift${files.length>1?' (samme oppskrift fordelt over flere sider)':''}. Returner KUN gyldig JSON i nøyaktig dette formatet:
 
 {
   "name": "Navn på oppskriften",
@@ -1862,7 +1862,7 @@ Svar KUN med JSON, ingen annen tekst.`;
         model:'claude-haiku-4-5-20251001',
         max_tokens:2048,
         messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
+          ...b64List.map(b64 => ({type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}})),
           {type:'text',text:promptText}
         ]}]
       })
