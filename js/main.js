@@ -998,8 +998,8 @@ function bindLogin() {
 function bindEdit() {
   document.getElementById('img-input').addEventListener('change', e=>handleImageFile(e.target.files[0]));
   document.getElementById('cam-input').addEventListener('change', e=>handleImageFile(e.target.files[0]));
-  document.getElementById('scan-input').addEventListener('change', e=>scanRecipe(Array.from(e.target.files)));
-  document.getElementById('scan-cam').addEventListener('change', e=>scanRecipe(Array.from(e.target.files)));
+  document.getElementById('scan-input').addEventListener('change', e=>addScanImages(Array.from(e.target.files)));
+  document.getElementById('scan-cam').addEventListener('change', e=>addScanImages(Array.from(e.target.files)));
   const container = document.getElementById('ing-container');
   if (container) {
     container.addEventListener('input', (e) => {
@@ -1828,6 +1828,101 @@ function toBase64(file){
   });
 }
 
+async function addScanImages(files) {
+  if (!files || files.length === 0) return;
+  if (!state.scanBuffer) state.scanBuffer = [];
+  setStatus('Forbereder bilder...');
+  for (const f of files) {
+    const b64 = await toBase64(f);
+    state.scanBuffer.push('data:image/jpeg;base64,' + b64);
+  }
+  setStatus('');
+  render();
+}
+
+function removeScanImage(idx) {
+  if (!state.scanBuffer) return;
+  state.scanBuffer.splice(idx, 1);
+  render();
+}
+
+function clearScanBuffer() {
+  state.scanBuffer = [];
+  render();
+}
+
+async function sendScanBuffer() {
+  if (!state.scanBuffer || state.scanBuffer.length === 0) {
+    setStatus('Ingen bilder å sende.');
+    return;
+  }
+  if (!state.anthropicKey) {
+    setStatus('Legg inn Claude API-nøkkel i innstillinger først.');
+    return;
+  }
+  saveFormState();
+  setStatus(`Leser oppskrift fra ${state.scanBuffer.length} bilde${state.scanBuffer.length!==1?'r':''}...`);
+  const b64List = state.scanBuffer.map(url => url.split(',')[1]);
+  const fileCount = state.scanBuffer.length;
+  const promptText = `Dette er ${fileCount>1?`${fileCount} bilder`:'et bilde'} av en oppskrift${fileCount>1?' (samme oppskrift fordelt over flere sider)':''}. Returner KUN gyldig JSON i nøyaktig dette formatet:
+
+{
+  "name": "Navn på oppskriften",
+  "ingredientsList": [
+    { "mengde": 500, "enhet": "g", "navn": "hvetemel", "merknad": "" },
+    { "mengde": null, "enhet": "", "navn": "salt", "merknad": "etter smak" }
+  ],
+  "steps": "Hele fremgangsmåten som tekst",
+  "notes": "Eventuelle ekstra notater fra oppskriften"
+}
+
+Regler for ingrediensene:
+- Hver ingrediens skal være ett objekt med fire felt: mengde (tall eller null), enhet (string), navn (string), merknad (string).
+- Bruk null for mengde hvis oppskriften ikke spesifiserer en mengde (f.eks. "salt etter smak").
+- Bruk tom streng "" for enhet, navn eller merknad hvis ikke aktuelt.
+- Vanlige enheter: g, kg, ml, dl, l, ts, ss, stk, pakke, knivsodd.
+- Hvis det står beskrivelser som "romtemperert", "finhakket", "knust" osv., legg dem i merknad.
+- Hvis mengden mangler men det står en kommentar (f.eks. "etter smak", "litt"), legg kommentaren i merknad og sett mengde=null.
+
+Svar KUN med JSON, ingen annen tekst.`;
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {'x-api-key':state.anthropicKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2048,
+        messages: [{role:'user', content:[
+          ...b64List.map(b64 => ({type:'image', source:{type:'base64', media_type:'image/jpeg', data:b64}})),
+          {type:'text', text:promptText}
+        ]}]
+      })
+    });
+    const data = await res.json();
+    const rawText = data.content?.[0]?.text || '{}';
+    const cleaned = rawText.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(cleaned);
+    if (parsed.name) state.editData.name = parsed.name;
+    if (Array.isArray(parsed.ingredientsList)) {
+      state.editData.versions[0].ingredientsList = parsed.ingredientsList.map(ing => {
+        const navn = ing.navn || '';
+        return {
+          mengde: (ing.mengde === null || ing.mengde === undefined) ? null : ing.mengde,
+          enhet: ing.enhet || '', navn, merknad: ing.merknad || '',
+          rolle: lookupRole(navn)
+        };
+      });
+    }
+    if (parsed.steps) state.editData.versions[0].steps = parsed.steps;
+    if (parsed.notes) state.editData.versions[0].notes = parsed.notes;
+    state.scanBuffer = [];
+    setStatus('Oppskrift lest! Sjekk og juster feltene.');
+    render();
+  } catch(e) {
+    console.error('Scan-feil:', e);
+    setStatus('Kunne ikke lese oppskriften. Prøv igjen.');
+  }
+}
 async function scanRecipe(files) {
   if(!files || files.length===0) return;
   if(!state.anthropicKey){setStatus('Legg inn Claude API-nøkkel i innstillinger først.');return;}
@@ -1953,6 +2048,7 @@ Object.assign(window,{
   markPlanGjennomført, markPlanPlanlagt,
   addRecipeToPlan, addNewStandardTask, deleteStandardTask, addCheckedTasksToPlan,
   toggleElementDone, removeElement, moveElement, editElement, cancelEditElement,
+  addScanImages, removeScanImage, clearScanBuffer, sendScanBuffer,
  setScaleMode, updateScaleField, updateProductField, commitPlanEdit, commitAnd, printPlan, addProductRow, removeProductRow,
 });
 
