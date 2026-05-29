@@ -274,7 +274,7 @@ function bakeryRecipesView() {
 
   return `
     <div class="topbar no-print"><button class="btn" onclick="exitBakeryRecipes()">← Bakeri</button>
-    <div class="gap"><button class="btn-primary" onclick="startNew()">+ Ny</button></div></div>
+    <div class="gap"><button class="btn-primary" onclick="startNew()">+ Ny oppskrift</button></div></div>
     <p class="muted" style="margin-bottom:4px">${b.name}</p>
     <h2 style="margin-bottom:8px">Oppskrifter</h2>
     ${bakeryRecipes.length > 0 ? chips : ''}
