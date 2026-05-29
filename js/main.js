@@ -60,6 +60,7 @@ function render() {
     state.view === 'bakery_plan_edit' ? bakeryPlanEditView() :
     state.view === 'edit' ? editView() :
     state.view === 'recipe' ? recipeView() :
+    state.view === 'recipes' ? recipesView() :
     homeView()
   }</div>`;
   if (state.view === 'edit') bindEdit();
@@ -153,15 +154,50 @@ function homeView() {
     ${state.loading?`<p class="status">Henter oppskrifter...</p>`:''}
     ${state.statusMsg && !state.loading?`<p class="status">${state.statusMsg}</p>`:''}
     ${!state.activeCategory ? bakeryBannerHtml() : ''}
-    ${!state.activeCategory ? `
-        <div class="card card-clickable" onclick="setView('roles')" style="margin-bottom:12px">
-          <p style="font-weight:500;margin-bottom:4px">Råvarer</p>
-          <p class="muted" style="margin-bottom:0">${Object.keys(state.ingredientRoles).length} ingredienser. Klikk for å redigere roller og tettheter.</p>
-        </div>
-        <div class="categories">${catGrid}</div>
-      ` : recipeList}`;
+<div class="card card-clickable" onclick="setView('recipes')" style="margin-bottom:12px">
+        <p style="font-weight:500;margin-bottom:4px">Oppskriftsarkiv</p>
+        <p class="muted" style="margin-bottom:0">${state.recipes.length} oppskrifter. Klikk for å bla i kategoriene.</p>
+      </div>
+      <div class="card card-clickable" onclick="setView('roles')" style="margin-bottom:12px">
+        <p style="font-weight:500;margin-bottom:4px">Råvarer</p>
+        <p class="muted" style="margin-bottom:0">${Object.keys(state.ingredientRoles).length} ingredienser. Klikk for å redigere roller og tettheter.</p>
+      </div>`;
 }
 
+function recipesView() {
+  const catGrid = allCategories().map(c => {
+    const count = state.recipes.filter(r=>r.category===c.id).length;
+    return `<button class="cat-btn ${state.activeCategory===c.id?'active':''}" onclick="selectCat('${c.id}')">
+      <span class="cat-name">${c.name}</span>
+      <span class="cat-count">${count} oppskrift${count!==1?'er':''}</span>
+    </button>`;
+  }).join('');
+
+  const filtered = state.activeCategory ? state.recipes.filter(r=>r.category===state.activeCategory) : [];
+  const catLabel = state.activeCategory ? getCatName(state.activeCategory) : '';
+
+  const recipeList = state.activeCategory ? `
+    <button class="btn" style="margin-bottom:12px" onclick="selectCat(null)">← Alle kategorier</button>
+    <h2 style="margin-bottom:12px">${catLabel}</h2>
+    ${filtered.length===0?`<div class="info-box">Ingen oppskrifter i denne kategorien ennå.</div>`:''}
+    ${filtered.map(r=>{
+      const thumb=r.versions.find(v=>v.images&&v.images.length>0)?.images[0]||null;
+      return `<div class="card card-clickable" onclick="openRecipe('${r.id}')" style="display:flex;align-items:center;gap:12px">
+        <div style="flex:1;min-width:0">
+          <p style="font-weight:500">${r.name}</p>
+          <p class="muted">Sist oppdatert ${fmt(r.versions[0].date)}</p>
+        </div>
+        ${thumb?`<img src="${thumb}" style="width:56px;height:56px;border-radius:8px;object-fit:cover;flex-shrink:0">`:''}
+      </div>`;
+    }).join('')}` : '';
+
+  return `
+    <div class="topbar no-print"><button class="btn" onclick="goHome()">← Hjem</button>
+      <button class="btn-primary" onclick="startNew()">+ Ny</button>
+    </div>
+    <h2 style="margin-bottom:12px">Oppskriftsarkiv</h2>
+    ${!state.activeCategory ? `<div class="categories">${catGrid}</div>` : recipeList}`;
+}
 function bakerySelectView() {
   const list = state.bakeries.map(b => {
     const count = state.recipes.filter(r => Array.isArray(r.bakeries) && r.bakeries.includes(b.id)).length;
