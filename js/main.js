@@ -149,7 +149,7 @@ function homeView() {
     <div class="topbar no-print" style="padding-top:0"><h1>Bakeboka</h1>
     <div class="gap">
       <button class="btn" onclick="setView('settings')">Innstillinger</button>
-      <button class="btn-primary" onclick="startNew()">+ Ny</button>
+      <button class="btn-primary" onclick="startNew()">+ Ny oppskrift</button>
     </div></div>
     ${state.loading?`<p class="status">Henter oppskrifter...</p>`:''}
     ${state.statusMsg && !state.loading?`<p class="status">${state.statusMsg}</p>`:''}
