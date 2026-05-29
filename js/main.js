@@ -688,11 +688,7 @@ function settingsView() {
       <p style="font-weight:500;margin-bottom:4px">Mine bakerier</p>
       <p class="muted">${state.bakeries.length} bakeri${state.bakeries.length===1?'':'er'} registrert. Klikk for å opprette eller endre.</p>
     </div>
-    <div class="card card-clickable" onclick="setView('roles')">
-      <p style="font-weight:500;margin-bottom:4px">Råvarer</p>
-      <p class="muted">${Object.keys(state.ingredientRoles).length} ingredienser. Klikk for å redigere roller og tettheter.</p>
-    </div>
-    <div class="card">
+       <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Opprett ny bruker</p>
       <p class="muted" style="margin-bottom:10px">Legg til en ny person som skal ha tilgang til appen.</p>
       <label>E-postadresse</label>
