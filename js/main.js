@@ -153,8 +153,7 @@ function homeView() {
     ${state.loading?`<p class="status">Henter oppskrifter...</p>`:''}
     ${state.statusMsg && !state.loading?`<p class="status">${state.statusMsg}</p>`:''}
     ${!state.activeCategory ? bakeryBannerHtml() : ''}
-    ${!state.activeCategory?`<div class="categories">${catGrid}</div>`:recipeList}`;
-  ${!state.activeCategory ? `
+    ${!state.activeCategory ? `
         <div class="card card-clickable" onclick="setView('roles')" style="margin-bottom:12px">
           <p style="font-weight:500;margin-bottom:4px">Råvarer</p>
           <p class="muted" style="margin-bottom:0">${Object.keys(state.ingredientRoles).length} ingredienser. Klikk for å redigere roller og tettheter.</p>
