@@ -750,7 +750,7 @@ function rolesView() {
     </div>`;
   }).join('');
   return `
-    <div class="topbar no-print"><button class="btn" onclick="setView('settings')">← Tilbake</button></div>
+    <div class="topbar no-print"><button class="btn" onclick="setView('home')">← Tilbake</button></div>
     <h2>Råvarer</h2>
     <div class="card">
       <p class="muted" style="margin-bottom:10px">Ingredienser i lista brukes til å foreslå rolle og tetthet automatisk når du legger inn nye ingredienser. Tetthet (g/ml) brukes til å regne om volumenheter (dl, ss, ts) til gram. Endringer lagres når du klikker «Lagre endringer».</p>
