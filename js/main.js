@@ -948,8 +948,8 @@ function editView() {
     <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Scan oppskrift fra bilde</p>
       <p class="muted" style="margin-bottom:10px">Ta bilde av en oppskrift – Claude leser den og fyller inn feltene automatisk.</p>
-      <input type="file" id="scan-cam" accept="image/*" capture="environment" style="display:none">
-      <input type="file" id="scan-input" accept="image/*" style="display:none">
+      <input type="file" id="scan-cam" accept="image/*" capture="environment" multiple style="display:none">
+      <input type="file" id="scan-input" accept="image/*" multiple style="display:none">
       <div class="gap">
         <button class="btn" style="flex:1" onclick="document.getElementById('scan-cam').click()">📷 Ta bilde</button>
         <button class="btn" style="flex:1" onclick="document.getElementById('scan-input').click()">🖼 Last opp</button>
