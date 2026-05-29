@@ -683,7 +683,7 @@ function settingsView() {
       <p class="muted">${state.bakeries.length} bakeri${state.bakeries.length===1?'':'er'} registrert. Klikk for å opprette eller endre.</p>
     </div>
     <div class="card card-clickable" onclick="setView('roles')">
-      <p style="font-weight:500;margin-bottom:4px">Ingrediensliste</p>
+      <p style="font-weight:500;margin-bottom:4px">Råvarer</p>
       <p class="muted">${Object.keys(state.ingredientRoles).length} ingredienser. Klikk for å redigere roller og tettheter.</p>
     </div>
     <div class="card">
@@ -749,7 +749,7 @@ function rolesView() {
   }).join('');
   return `
     <div class="topbar no-print"><button class="btn" onclick="setView('settings')">← Tilbake</button></div>
-    <h2>Ingrediensliste</h2>
+    <h2>Råvarer</h2>
     <div class="card">
       <p class="muted" style="margin-bottom:10px">Ingredienser i lista brukes til å foreslå rolle og tetthet automatisk når du legger inn nye ingredienser. Tetthet (g/ml) brukes til å regne om volumenheter (dl, ss, ts) til gram. Endringer lagres når du klikker «Lagre endringer».</p>
       <div class="role-search">
