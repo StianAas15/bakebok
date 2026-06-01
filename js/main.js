@@ -952,6 +952,19 @@ function editView() {
         <button id="scan-cam-btn" class="btn" style="flex:1" type="button">📷 Ta bilde</button>
         <button id="scan-upload-btn" class="btn" style="flex:1" type="button">🖼 Last opp</button>
       </div>
+      ${state.scanBuffer && state.scanBuffer.length > 0 ? `
+        <div class="scan-thumbs">
+          ${state.scanBuffer.map((url, i) => `
+            <div class="scan-thumb">
+              <img src="${url}" alt="Bilde ${i+1}">
+              <button class="scan-thumb-remove" onclick="removeScanImage(${i})" type="button">×</button>
+            </div>`).join('')}
+        </div>
+        <button class="btn-primary" style="width:100%;margin-top:8px" type="button" onclick="sendScanBuffer()">
+          Send ${state.scanBuffer.length} bilde${state.scanBuffer.length!==1?'r':''} til Claude
+        </button>
+        <button class="btn" style="width:100%;margin-top:4px" type="button" onclick="clearScanBuffer()">Tøm</button>
+      ` : ''}
     </div>
     <div class="card">
       <label>Navn</label><input id="e-name" class="${state.validationErrors.name?'input-error':''}" value="${state.editData.name}" placeholder="F.eks. Surdeigsbaguetter">
