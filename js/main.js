@@ -961,7 +961,7 @@ function editView() {
             </div>`).join('')}
         </div>
         <button class="btn-primary" style="width:100%;margin-top:8px" type="button" onclick="sendScanBuffer()">
-          Send ${state.scanBuffer.length} bilde${state.scanBuffer.length!==1?'r':''} til Claude
+          Send bildene (${state.scanBuffer.length})
         </button>
         <button class="btn" style="width:100%;margin-top:4px" type="button" onclick="clearScanBuffer()">Tøm</button>
       ` : ''}
