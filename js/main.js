@@ -1008,6 +1008,16 @@ function bindEdit() {
     inp.onchange = e => addScanImages(Array.from(e.target.files));
     inp.click();
   });
+    const container = document.getElementById('ing-container');
+  if (container) {
+    container.addEventListener('input', (e) => {
+      const cls = e.target.classList;
+      if (cls && (cls.contains('ing-mengde') || cls.contains('ing-enhet'))) {
+        saveFormState();
+        clearTimeout(window.recalcTimer);
+        window.recalcTimer = setTimeout(() => updateBakePctsInPlace(), 400);
+      }
+    });
     container.addEventListener('change', (e) => {
       if (e.target.tagName === 'SELECT' && e.target.classList.contains('ing-rolle')) {
         saveFormState();
