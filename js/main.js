@@ -850,28 +850,16 @@ function recipeView() {
   const tabs = r.versions.length>1?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${r.versions.map((ver,i)=>
     `<button class="btn" style="font-size:12px;${i===state.selectedVersion?'background:#f0f0e8':''}" onclick="selVer(${i})">v${r.versions.length-i} · ${fmt(ver.date)}</button>`).join('')}</div>`:'';
   const imgs=(v.images||[]).map(img=>`<img class="recipe-img" src="${img}" alt="">`).join('');
-  const ingList = (v.ingredientsList || []);
+  const parts = getVersionParts(v);
   const showPct = shouldShowBakePct(r.category);
-  const pcts = calcBakePcts(ingList);
-  const melTotal = pcts && pcts.melTotal ? pcts.melTotal : 0;
-  const ingHtml = ingList.length === 0
-    ? `<p class="muted">Ingen ingredienser registrert.</p>`
-    : ingList.map(ing => {
-        const main = formatIngredientWithConv(ing);
-        const merknad = ing.merknad ? `<span class="ing-merknad-text">(${ing.merknad})</span>` : '';
-        let pctStr = '';
-        if (showPct && melTotal > 0) {
-          const p = ingredientPct(ing, melTotal);
-          if (p !== null) pctStr = `<span class="ing-pct-text">${Math.round(p)}%</span>`;
-        }
-        return `<div class="ing-list-item"><span>${main}${merknad}</span>${pctStr}</div>`;
-      }).join('');
+  const allIngredients = parts.flatMap(p => p.ingredientsList || []);
+  const allPcts = calcBakePcts(allIngredients);
 
   let costHtml = '';
   if (state.activeBakery) {
-    const cost = calcRecipeCost(ingList);
+    const cost = calcRecipeCost(allIngredients);
     if (cost) {
-      const perKg = pcts && pcts.deigvekt > 0 ? (cost.totalCost / pcts.deigvekt * 1000) : null;
+      const perKg = allPcts && allPcts.deigvekt > 0 ? (cost.totalCost / allPcts.deigvekt * 1000) : null;
       costHtml = `
         <div class="cost-summary">
           <div class="cost-main">Råvarekostnad: ${fmtKr(cost.totalCost)}</div>
@@ -884,6 +872,34 @@ function recipeView() {
       costHtml = `<div class="warn-box no-print">⚠ Ingen av ingrediensene har registrert pris.</div>`;
     }
   }
+
+  const partsHtml = parts.map((part, pi) => {
+    const ingList = part.ingredientsList || [];
+    const pcts = calcBakePcts(ingList);
+    const melTotal = pcts && pcts.melTotal ? pcts.melTotal : 0;
+    const ingHtml = ingList.length === 0
+      ? `<p class="muted">Ingen ingredienser registrert.</p>`
+      : ingList.map(ing => {
+          const main = formatIngredientWithConv(ing);
+          const merknad = ing.merknad ? `<span class="ing-merknad-text">(${ing.merknad})</span>` : '';
+          let pctStr = '';
+          if (showPct && melTotal > 0) {
+            const p = ingredientPct(ing, melTotal);
+            if (p !== null) pctStr = `<span class="ing-pct-text">${Math.round(p)}%</span>`;
+          }
+          return `<div class="ing-list-item"><span>${main}${merknad}</span>${pctStr}</div>`;
+        }).join('');
+    const heading = parts.length > 1 && part.navn ? `<p style="font-weight:600;margin-bottom:6px">${part.navn}</p>` : '';
+    return `
+      <div class="card">
+        ${heading}
+        <p style="font-weight:500;margin-bottom:8px">Ingredienser</p>
+        ${bakePctSummaryHtml(pcts, showPct)}
+        ${ingHtml}
+      </div>
+      ${part.steps ? `<div class="card"><p style="font-weight:500;margin-bottom:8px">${parts.length > 1 && part.navn ? part.navn + ' – Fremgangsmåte' : 'Fremgangsmåte'}</p><pre>${part.steps}</pre></div>` : ''}
+    `;
+  }).join('');
 
   const recipeBakeries = (r.bakeries || []).map(bid => state.bakeries.find(b => b.id === bid)).filter(Boolean);
   const tagsHtml = recipeBakeries.length > 0
@@ -920,15 +936,14 @@ function recipeView() {
     <h2 style="margin-bottom:8px">${r.name}</h2>
     ${tagsHtml}
     ${tabs}${imgs}
-    ${bakePctSummaryHtml(pcts, showPct)}
+    ${bakePctSummaryHtml(allPcts, showPct)}
     ${costHtml}
     ${v.notes?`<div class="info-box">${v.notes}</div>`:''}
-    <div class="card"><p style="font-weight:500;margin-bottom:8px">Ingredienser</p>${ingHtml}</div>
-    <div class="card"><p style="font-weight:500;margin-bottom:8px">Fremgangsmåte</p><pre>${v.steps || ''}</pre></div>
+    ${partsHtml}
     ${bakeryActionsHtml}`;
 }
 
-function ingredientRowHtml(ing, idx, melTotal, showPct) {
+function ingredientRowHtml(ing, idx, melTotal, showPct, partIdx) {
   const roleOpts = ROLE_OPTIONS.map(r => `<option value="${r.id}" ${r.id===(ing.rolle||'')?'selected':''}>${r.label}</option>`).join('');
   let pctStr = '';
   if (showPct && melTotal > 0) {
@@ -942,7 +957,7 @@ function ingredientRowHtml(ing, idx, melTotal, showPct) {
       <input type="text" class="ing-navn" placeholder="Ingrediens" value="${ing.navn || ''}" data-idx="${idx}">
       <select class="ing-rolle">${roleOpts}</select>
       <span class="ing-pct">${pctStr}</span>
-      <button type="button" class="ing-remove" onclick="removeIngredient(${idx})" title="Fjern">×</button>
+      <button type="button" class="ing-remove" onclick="removeIngredient(${partIdx},${idx})" title="Fjern">×</button>
     </div>
     <div class="ing-merknad">
       <input type="text" class="ing-merknad-input" placeholder="Merknad (f.eks. romtemperert, etter smak)" value="${ing.merknad || ''}">
@@ -951,14 +966,10 @@ function ingredientRowHtml(ing, idx, melTotal, showPct) {
 
 function editView() {
   const v = state.editData.versions[0];
+  const parts = getVersionParts(v);
   const imgs=(v.images||[]).map(img=>`<img class="recipe-img" src="${img}" alt="">`).join('');
   const catOptions=allCategories().map(c=>`<option value="${c.id}" ${state.editData.category===c.id?'selected':''}>${c.name}</option>`).join('');
-  const ingList = v.ingredientsList || [];
   const showPct = shouldShowBakePct(state.editData.category);
-  const pcts = calcBakePcts(ingList);
-  const melTotal = pcts && pcts.melTotal ? pcts.melTotal : 0;
-  const ingRowsHtml = ingList.map((ing, i) => ingredientRowHtml(ing, i, melTotal, showPct)).join('');
-  const summaryHtml = bakePctSummaryHtml(pcts, showPct);
   const recipeBakeries = state.editData.bakeries || [];
   const bakeryCheckboxes = state.bakeries.length === 0 ? '' : `
     <div class="card">
@@ -971,6 +982,29 @@ function editView() {
         </div>
       `).join('')}
     </div>`;
+  const partsHtml = parts.map((part, pi) => {
+    const ingList = part.ingredientsList || [];
+    const pcts = calcBakePcts(ingList);
+    const melTotal = pcts && pcts.melTotal ? pcts.melTotal : 0;
+    const ingRowsHtml = ingList.map((ing, i) => ingredientRowHtml(ing, i, melTotal, showPct, pi)).join('');
+    const summaryHtml = bakePctSummaryHtml(pcts, showPct);
+    const summaryWrapped = summaryHtml ? summaryHtml.replace('<div class="bakepct-summary">', `<div class="bakepct-summary" id="bakepct-${pi}">`) : `<span id="bakepct-${pi}"></span>`;
+    return `
+      <div class="card part-card" data-part="${pi}">
+        ${parts.length > 1 ? `
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <input class="part-navn-input" placeholder="Navn på del (f.eks. Deig)" value="${part.navn || ''}" style="font-weight:500;font-size:15px;flex:1;margin-right:8px;border:none;border-bottom:1px solid #ccc;background:transparent;padding:4px 0">
+            <button type="button" class="btn-danger" style="padding:4px 10px;font-size:12px" onclick="removePart(${pi})">Fjern del</button>
+          </div>
+        ` : ''}
+        <p style="font-weight:500;margin-bottom:8px">Ingredienser</p>
+        ${summaryWrapped}
+        <div class="ing-container" data-part="${pi}">${ingRowsHtml}</div>
+        <button type="button" class="btn" style="margin-top:8px" onclick="addIngredient(${pi})">+ Legg til ingrediens</button>
+        <label>Fremgangsmåte</label>
+        <textarea class="e-steps" rows="6">${part.steps || ''}</textarea>
+      </div>`;
+  }).join('');
   return `
     <div class="topbar"><button class="btn" onclick="cancelEdit()">← Avbryt</button></div>
     <h2>${state.editData.name||'Ny oppskrift'}</h2>
@@ -1001,13 +1035,10 @@ function editView() {
       <select id="e-cat" class="${state.validationErrors.category?'input-error':''}"><option value="">Velg kategori...</option>${catOptions}</select>
     </div>
     ${bakeryCheckboxes}
-    <div class="card">
-      <p class="muted" style="margin-bottom:8px">Versjon – ${fmt(v.date)}</p>
-      <p style="font-weight:500;margin-bottom:8px">Ingredienser</p>
-      ${summaryHtml}
-      <div id="ing-container">${ingRowsHtml}</div>
-      <button type="button" class="btn" style="margin-top:8px" onclick="addIngredient()">+ Legg til ingrediens</button>
-      <label>Fremgangsmåte</label><textarea id="e-steps" rows="6">${v.steps || ''}</textarea>
+    <p class="muted" style="margin-bottom:4px;margin-top:8px">Versjon – ${fmt(v.date)}</p>
+    <div id="parts-wrapper">${partsHtml}</div>
+    <button type="button" class="btn" style="width:100%;margin-top:4px" onclick="addPart()">+ Legg til del</button>
+    <div class="card" style="margin-top:8px">
       <label>Notater / justeringer</label><textarea id="e-notes" rows="3">${v.notes || ''}</textarea>
     </div>
     <div class="card">
@@ -1054,9 +1085,9 @@ function bindEdit() {
     document.body.appendChild(inp);
     inp.click();
   });
-  const container = document.getElementById('ing-container');
-  if (container) {
-    container.addEventListener('input', (e) => {
+  const partsWrapper = document.getElementById('parts-wrapper');
+  if (partsWrapper) {
+    partsWrapper.addEventListener('input', (e) => {
       const cls = e.target.classList;
       if (cls && (cls.contains('ing-mengde') || cls.contains('ing-enhet'))) {
         saveFormState();
@@ -1064,13 +1095,13 @@ function bindEdit() {
         window.recalcTimer = setTimeout(() => updateBakePctsInPlace(), 400);
       }
     });
-    container.addEventListener('change', (e) => {
+    partsWrapper.addEventListener('change', (e) => {
       if (e.target.tagName === 'SELECT' && e.target.classList.contains('ing-rolle')) {
         saveFormState();
         render();
       }
     });
-    container.addEventListener('blur', (e) => {
+    partsWrapper.addEventListener('blur', (e) => {
       if (e.target.classList && e.target.classList.contains('ing-navn')) {
         const row = e.target.closest('.ing-row');
         if (!row) return;
@@ -1102,30 +1133,38 @@ function bindEdit() {
 
 function updateBakePctsInPlace() {
   if (!state.editData) return;
-  const ingList = state.editData.versions[0].ingredientsList || [];
+  const parts = state.editData.versions[0].parts || [];
   const showPct = shouldShowBakePct(state.editData.category);
-  const pcts = calcBakePcts(ingList);
-  const melTotal = pcts && pcts.melTotal ? pcts.melTotal : 0;
-  const summary = document.querySelector('.bakepct-summary');
-  if (summary) {
-    const newSummary = bakePctSummaryHtml(pcts, showPct);
-    if (newSummary) summary.outerHTML = newSummary;
-    else summary.remove();
-  } else if (pcts && (pcts.deigvekt > 0 || (showPct && pcts.hydrering))) {
-    render(); return;
-  }
-  const rows = document.querySelectorAll('.ing-row');
-  rows.forEach((row, i) => {
-    const ing = ingList[i];
-    if (!ing) return;
-    const pctSpan = row.querySelector('.ing-pct');
-    if (!pctSpan) return;
-    let pctStr = '';
-    if (showPct && melTotal > 0) {
-      const p = ingredientPct(ing, melTotal);
-      if (p !== null) pctStr = Math.round(p) + '%';
+  parts.forEach((part, pi) => {
+    const ingList = part.ingredientsList || [];
+    const pcts = calcBakePcts(ingList);
+    const melTotal = pcts && pcts.melTotal ? pcts.melTotal : 0;
+    const summaryEl = document.getElementById(`bakepct-${pi}`);
+    if (summaryEl) {
+      const newHtml = bakePctSummaryHtml(pcts, showPct);
+      if (newHtml) {
+        summaryEl.outerHTML = newHtml.replace('<div class="bakepct-summary">', `<div class="bakepct-summary" id="bakepct-${pi}">`);
+      } else {
+        summaryEl.innerHTML = '';
+      }
+    } else if (pcts && (pcts.deigvekt > 0 || (showPct && pcts.hydrering))) {
+      render(); return;
     }
-    pctSpan.textContent = pctStr;
+    const container = document.querySelector(`.ing-container[data-part="${pi}"]`);
+    if (!container) return;
+    const rows = container.querySelectorAll('.ing-row');
+    rows.forEach((row, i) => {
+      const ing = ingList[i];
+      if (!ing) return;
+      const pctSpan = row.querySelector('.ing-pct');
+      if (!pctSpan) return;
+      let pctStr = '';
+      if (showPct && melTotal > 0) {
+        const p = ingredientPct(ing, melTotal);
+        if (p !== null) pctStr = Math.round(p) + '%';
+      }
+      pctSpan.textContent = pctStr;
+    });
   });
 }
 
@@ -1218,6 +1257,11 @@ function emptyIngredient() {
   return { mengde: '', enhet: '', navn: '', merknad: '', rolle: '' };
 }
 
+function getVersionParts(v) {
+  if (Array.isArray(v.parts) && v.parts.length > 0) return v.parts;
+  return [{ navn: '', ingredientsList: v.ingredientsList || [], steps: v.steps || '' }];
+}
+
 function startNew() {
   state.validationErrors = {};
   const initialBakeries = state.activeBakery ? [state.activeBakery] : [];
@@ -1226,8 +1270,8 @@ function startNew() {
     name:'', category:'', bakeries: initialBakeries,
     versions:[{
       date:new Date().toISOString(), notes:'',
-      ingredientsList:[ emptyIngredient() ],
-      steps:'', images:[]
+      parts:[{ navn:'', ingredientsList:[emptyIngredient()], steps:'' }],
+      images:[]
     }]
   };
   state.view='edit';render();
@@ -1237,35 +1281,54 @@ function startEdit() {
   state.validationErrors = {};
   if (window.recalcTimer) clearTimeout(window.recalcTimer);
   state.editData=JSON.parse(JSON.stringify(state.recipes.find(r=>r.id===state.selected)));
-  if (!state.editData.versions[0].ingredientsList) state.editData.versions[0].ingredientsList = [ emptyIngredient() ];
   if (!Array.isArray(state.editData.bakeries)) state.editData.bakeries = [];
-  state.editData.versions[0].ingredientsList.forEach(ing => { if (ing.rolle === undefined) ing.rolle = ''; });
+  const v0 = state.editData.versions[0];
+  if (!Array.isArray(v0.parts) || v0.parts.length === 0) {
+    v0.parts = [{ navn:'', ingredientsList: v0.ingredientsList || [], steps: v0.steps || '' }];
+  }
+  v0.parts.forEach(p => {
+    if (!Array.isArray(p.ingredientsList) || p.ingredientsList.length === 0) p.ingredientsList = [emptyIngredient()];
+    p.ingredientsList.forEach(ing => { if (ing.rolle === undefined) ing.rolle = ''; });
+  });
   state.view='edit';render();
 }
 
-function addIngredient() {
+function addIngredient(partIdx) {
   if (window.recalcTimer) clearTimeout(window.recalcTimer);
   saveFormState();
-  state.editData.versions[0].ingredientsList.push(emptyIngredient());
+  state.editData.versions[0].parts[partIdx].ingredientsList.push(emptyIngredient());
   render();
 }
 
-function removeIngredient(idx) {
+function removeIngredient(partIdx, idx) {
   if (window.recalcTimer) clearTimeout(window.recalcTimer);
   saveFormState();
-  state.editData.versions[0].ingredientsList.splice(idx, 1);
-  if (state.editData.versions[0].ingredientsList.length === 0) state.editData.versions[0].ingredientsList.push(emptyIngredient());
+  const list = state.editData.versions[0].parts[partIdx].ingredientsList;
+  list.splice(idx, 1);
+  if (list.length === 0) list.push(emptyIngredient());
+  render();
+}
+
+function addPart() {
+  saveFormState();
+  state.editData.versions[0].parts.push({ navn:'', ingredientsList:[emptyIngredient()], steps:'' });
+  render();
+}
+
+function removePart(partIdx) {
+  saveFormState();
+  const parts = state.editData.versions[0].parts;
+  parts.splice(partIdx, 1);
+  if (parts.length === 0) parts.push({ navn:'', ingredientsList:[emptyIngredient()], steps:'' });
   render();
 }
 
 function saveFormState() {
   const n=document.getElementById('e-name');
   const c=document.getElementById('e-cat');
-  const s=document.getElementById('e-steps');
   const nt=document.getElementById('e-notes');
   if(n)state.editData.name=n.value;
   if(c)state.editData.category=c.value;
-  if(s)state.editData.versions[0].steps=s.value;
   if(nt)state.editData.versions[0].notes=nt.value;
   const checkedBakeries = [];
   state.bakeries.forEach(b => {
@@ -1273,26 +1336,36 @@ function saveFormState() {
     if (cb && cb.checked) checkedBakeries.push(b.id);
   });
   state.editData.bakeries = checkedBakeries;
-  const container = document.getElementById('ing-container');
-  if (container) {
-    const rows = container.querySelectorAll('.ing-row');
-    const merknader = container.querySelectorAll('.ing-merknad-input');
-    const newList = [];
-    rows.forEach((row, i) => {
-      const mengdeStr = row.querySelector('.ing-mengde').value.trim();
-      const enhet = row.querySelector('.ing-enhet').value.trim();
-      const navn = row.querySelector('.ing-navn').value.trim();
-      const rolle = row.querySelector('.ing-rolle').value;
-      const merknad = merknader[i] ? merknader[i].value.trim() : '';
-      let mengde = null;
-      if (mengdeStr !== '') {
-        const num = parseFloat(mengdeStr.replace(',', '.'));
-        mengde = isNaN(num) ? mengdeStr : num;
-      }
-      const finalRolle = rolle || lookupRole(navn);
-      newList.push({ mengde, enhet, navn, merknad, rolle: finalRolle });
+  const partsWrapper = document.getElementById('parts-wrapper');
+  if (partsWrapper) {
+    const partCards = partsWrapper.querySelectorAll('.part-card');
+    const newParts = [];
+    partCards.forEach((card) => {
+      const navnInput = card.querySelector('.part-navn-input');
+      const naam = navnInput ? navnInput.value.trim() : '';
+      const stepsEl = card.querySelector('.e-steps');
+      const stepsVal = stepsEl ? stepsEl.value : '';
+      const container = card.querySelector('.ing-container');
+      const rows = container ? container.querySelectorAll('.ing-row') : [];
+      const merknader = container ? container.querySelectorAll('.ing-merknad-input') : [];
+      const newList = [];
+      rows.forEach((row, i) => {
+        const mengdeStr = row.querySelector('.ing-mengde').value.trim();
+        const enhet = row.querySelector('.ing-enhet').value.trim();
+        const navn = row.querySelector('.ing-navn').value.trim();
+        const rolle = row.querySelector('.ing-rolle').value;
+        const merknad = merknader[i] ? merknader[i].value.trim() : '';
+        let mengde = null;
+        if (mengdeStr !== '') {
+          const num = parseFloat(mengdeStr.replace(',', '.'));
+          mengde = isNaN(num) ? mengdeStr : num;
+        }
+        const finalRolle = rolle || lookupRole(navn);
+        newList.push({ mengde, enhet, navn, merknad, rolle: finalRolle });
+      });
+      newParts.push({ navn: naam, ingredientsList: newList, steps: stepsVal });
     });
-    state.editData.versions[0].ingredientsList = newList;
+    state.editData.versions[0].parts = newParts;
   }
 }
 
@@ -1306,8 +1379,9 @@ async function handleSave() {
     setStatus(`${missing.join(' og ')} må fylles inn før oppskriften kan lagres.`);
     render(); return;
   }
-  state.editData.versions[0].ingredientsList = state.editData.versions[0].ingredientsList
-    .filter(ing => ing.navn || ing.mengde || ing.enhet || ing.merknad);
+  (state.editData.versions[0].parts || []).forEach(p => {
+    p.ingredientsList = (p.ingredientsList || []).filter(ing => ing.navn || ing.mengde || ing.enhet || ing.merknad);
+  });
   state.loading=true;setStatus('Lagrer...');
   await saveRecipeToDb(state.editData);
   state.loading=false;
@@ -1931,21 +2005,26 @@ async function sendScanBuffer() {
 
 {
   "name": "Navn på oppskriften",
-  "ingredientsList": [
-    { "mengde": 500, "enhet": "g", "navn": "hvetemel", "merknad": "" },
-    { "mengde": null, "enhet": "", "navn": "salt", "merknad": "etter smak" }
+  "parts": [
+    {
+      "navn": "Deig",
+      "ingredientsList": [
+        { "mengde": 500, "enhet": "g", "navn": "hvetemel", "merknad": "" },
+        { "mengde": null, "enhet": "", "navn": "salt", "merknad": "etter smak" }
+      ],
+      "steps": "Fremgangsmåte for denne delen"
+    }
   ],
-  "steps": "Hele fremgangsmåten som tekst",
   "notes": "Eventuelle ekstra notater fra oppskriften"
 }
 
-Regler for ingrediensene:
-- Hver ingrediens skal være ett objekt med fire felt: mengde (tall eller null), enhet (string), navn (string), merknad (string).
-- Bruk null for mengde hvis oppskriften ikke spesifiserer en mengde (f.eks. "salt etter smak").
-- Bruk tom streng "" for enhet, navn eller merknad hvis ikke aktuelt.
+Regler:
+- Hvis oppskriften har flere deler (f.eks. "Deig" og "Glasur"), lag én post per del i "parts"-lista.
+- Hvis oppskriften bare har én del, lag én post med tomt "navn"-felt.
+- Hver ingrediens: mengde (tall eller null), enhet (string), navn (string), merknad (string).
+- Bruk null for mengde hvis ikke spesifisert. Tom streng "" for felt som ikke gjelder.
 - Vanlige enheter: g, kg, ml, dl, l, ts, ss, stk, pakke, knivsodd.
-- Hvis det står beskrivelser som "romtemperert", "finhakket", "knust" osv., legg dem i merknad.
-- Hvis mengden mangler men det står en kommentar (f.eks. "etter smak", "litt"), legg kommentaren i merknad og sett mengde=null.
+- Beskrivelser som "romtemperert", "finhakket" legges i merknad.
 
 Svar KUN med JSON, ingen annen tekst.`;
   try {
@@ -1954,7 +2033,7 @@ Svar KUN med JSON, ingen annen tekst.`;
       headers: {'x-api-key':state.anthropicKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 2048,
+        max_tokens: 4096,
         messages: [{role:'user', content:[
           ...b64List.map(b64 => ({type:'image', source:{type:'base64', media_type:'image/jpeg', data:b64}})),
           {type:'text', text:promptText}
@@ -1966,17 +2045,16 @@ Svar KUN med JSON, ingen annen tekst.`;
     const cleaned = rawText.replace(/```json|```/g,'').trim();
     const parsed = JSON.parse(cleaned);
     if (parsed.name) state.editData.name = parsed.name;
-    if (Array.isArray(parsed.ingredientsList)) {
-      state.editData.versions[0].ingredientsList = parsed.ingredientsList.map(ing => {
-        const navn = ing.navn || '';
-        return {
-          mengde: (ing.mengde === null || ing.mengde === undefined) ? null : ing.mengde,
-          enhet: ing.enhet || '', navn, merknad: ing.merknad || '',
-          rolle: lookupRole(navn)
-        };
-      });
+    if (Array.isArray(parsed.parts)) {
+      state.editData.versions[0].parts = parsed.parts.map(part => ({
+        navn: part.navn || '',
+        ingredientsList: (part.ingredientsList || []).map(ing => {
+          const navn = ing.navn || '';
+          return { mengde: (ing.mengde === null || ing.mengde === undefined) ? null : ing.mengde, enhet: ing.enhet || '', navn, merknad: ing.merknad || '', rolle: lookupRole(navn) };
+        }),
+        steps: part.steps || ''
+      }));
     }
-    if (parsed.steps) state.editData.versions[0].steps = parsed.steps;
     if (parsed.notes) state.editData.versions[0].notes = parsed.notes;
     state.scanBuffer = [];
     setStatus('Oppskrift lest! Sjekk og juster feltene.');
@@ -1995,21 +2073,26 @@ async function scanRecipe(files) {
 
 {
   "name": "Navn på oppskriften",
-  "ingredientsList": [
-    { "mengde": 500, "enhet": "g", "navn": "hvetemel", "merknad": "" },
-    { "mengde": null, "enhet": "", "navn": "salt", "merknad": "etter smak" }
+  "parts": [
+    {
+      "navn": "Deig",
+      "ingredientsList": [
+        { "mengde": 500, "enhet": "g", "navn": "hvetemel", "merknad": "" },
+        { "mengde": null, "enhet": "", "navn": "salt", "merknad": "etter smak" }
+      ],
+      "steps": "Fremgangsmåte for denne delen"
+    }
   ],
-  "steps": "Hele fremgangsmåten som tekst",
   "notes": "Eventuelle ekstra notater fra oppskriften"
 }
 
-Regler for ingrediensene:
-- Hver ingrediens skal være ett objekt med fire felt: mengde (tall eller null), enhet (string), navn (string), merknad (string).
-- Bruk null for mengde hvis oppskriften ikke spesifiserer en mengde (f.eks. "salt etter smak").
-- Bruk tom streng "" for enhet, navn eller merknad hvis ikke aktuelt.
+Regler:
+- Hvis oppskriften har flere deler (f.eks. "Deig" og "Glasur"), lag én post per del i "parts"-lista.
+- Hvis oppskriften bare har én del, lag én post med tomt "navn"-felt.
+- Hver ingrediens: mengde (tall eller null), enhet (string), navn (string), merknad (string).
+- Bruk null for mengde hvis ikke spesifisert. Tom streng "" for felt som ikke gjelder.
 - Vanlige enheter: g, kg, ml, dl, l, ts, ss, stk, pakke, knivsodd.
-- Hvis det står beskrivelser som "romtemperert", "finhakket", "knust" osv., legg dem i merknad.
-- Hvis mengden mangler men det står en kommentar (f.eks. "etter smak", "litt"), legg kommentaren i merknad og sett mengde=null.
+- Beskrivelser som "romtemperert", "finhakket" legges i merknad.
 
 Svar KUN med JSON, ingen annen tekst.`;
   try {
@@ -2018,7 +2101,7 @@ Svar KUN med JSON, ingen annen tekst.`;
       headers:{'x-api-key':state.anthropicKey,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
       body:JSON.stringify({
         model:'claude-haiku-4-5-20251001',
-        max_tokens:2048,
+        max_tokens:4096,
         messages:[{role:'user',content:[
           ...b64List.map(b64 => ({type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}})),
           {type:'text',text:promptText}
@@ -2030,17 +2113,16 @@ Svar KUN med JSON, ingen annen tekst.`;
     const cleaned = rawText.replace(/```json|```/g,'').trim();
     const parsed = JSON.parse(cleaned);
     if (parsed.name) state.editData.name = parsed.name;
-    if (Array.isArray(parsed.ingredientsList)) {
-      state.editData.versions[0].ingredientsList = parsed.ingredientsList.map(ing => {
-        const navn = ing.navn || '';
-        return {
-          mengde: (ing.mengde === null || ing.mengde === undefined) ? null : ing.mengde,
-          enhet: ing.enhet || '', navn, merknad: ing.merknad || '',
-          rolle: lookupRole(navn)
-        };
-      });
+    if (Array.isArray(parsed.parts)) {
+      state.editData.versions[0].parts = parsed.parts.map(part => ({
+        navn: part.navn || '',
+        ingredientsList: (part.ingredientsList || []).map(ing => {
+          const navn = ing.navn || '';
+          return { mengde: (ing.mengde === null || ing.mengde === undefined) ? null : ing.mengde, enhet: ing.enhet || '', navn, merknad: ing.merknad || '', rolle: lookupRole(navn) };
+        }),
+        steps: part.steps || ''
+      }));
     }
-    if (parsed.steps) state.editData.versions[0].steps = parsed.steps;
     if (parsed.notes) state.editData.versions[0].notes = parsed.notes;
     setStatus('Oppskrift lest! Sjekk og juster feltene.');
     render();

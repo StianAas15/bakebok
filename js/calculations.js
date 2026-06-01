@@ -235,11 +235,15 @@ export function getRecipeDataForElement(element, isFrozen) {
   const r = state.recipes.find(x => x.id === element.recipeId);
   if (!r) return null;
   const v = r.versions[0];
-  const pcts = calcBakePcts(v.ingredientsList || []);
+  const parts = (Array.isArray(v.parts) && v.parts.length > 0)
+    ? v.parts
+    : [{ ingredientsList: v.ingredientsList || [] }];
+  const allIngredients = parts.flatMap(p => p.ingredientsList || []);
+  const pcts = calcBakePcts(allIngredients);
   return {
     name: r.name,
     category: r.category,
-    ingredientsList: v.ingredientsList || [],
+    ingredientsList: allIngredients,
     deigvekt: pcts ? pcts.deigvekt : 0
   };
 }
