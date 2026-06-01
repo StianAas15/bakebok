@@ -945,12 +945,14 @@ function editView() {
   return `
     <div class="topbar"><button class="btn" onclick="cancelEdit()">← Avbryt</button></div>
     <h2>${state.editData.name||'Ny oppskrift'}</h2>
-        <div class="card">
+    <div class="card">
       <p style="font-weight:500;margin-bottom:8px">Scan oppskrift fra bilde</p>
       <p class="muted" style="margin-bottom:10px">Ta bilde av en oppskrift – Claude leser den og fyller inn feltene automatisk.</p>
+      <input type="file" id="scan-cam" accept="image/*" capture="environment" multiple style="display:none">
+      <input type="file" id="scan-input" accept="image/*" multiple style="display:none">
       <div class="gap">
-        <button id="scan-cam-btn" class="btn" style="flex:1" type="button">📷 Ta bilde</button>
-        <button id="scan-upload-btn" class="btn" style="flex:1" type="button">🖼 Last opp</button>
+        <button class="btn" style="flex:1" onclick="document.getElementById('scan-cam').click()">📷 Ta bilde</button>
+        <button class="btn" style="flex:1" onclick="document.getElementById('scan-input').click()">🖼 Last opp</button>
       </div>
     </div>
     <div class="card">
@@ -996,19 +998,9 @@ function bindLogin() {
 function bindEdit() {
   document.getElementById('img-input').addEventListener('change', e=>handleImageFile(e.target.files[0]));
   document.getElementById('cam-input').addEventListener('change', e=>handleImageFile(e.target.files[0]));
-  document.getElementById('scan-upload-btn').addEventListener('click', () => {
-    const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
-    inp.onchange = e => addScanImages(Array.from(e.target.files));
-    inp.click();
-  });
-  document.getElementById('scan-cam-btn').addEventListener('click', () => {
-    const inp = document.createElement('input');
-    inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true; inp.capture = 'environment';
-    inp.onchange = e => addScanImages(Array.from(e.target.files));
-    inp.click();
-  });
-    const container = document.getElementById('ing-container');
+  document.getElementById('scan-input').addEventListener('change', e=>addScanImages(Array.from(e.target.files)));
+  document.getElementById('scan-cam').addEventListener('change', e=>addScanImages(Array.from(e.target.files)));
+  const container = document.getElementById('ing-container');
   if (container) {
     container.addEventListener('input', (e) => {
       const cls = e.target.classList;
