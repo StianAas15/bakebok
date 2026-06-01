@@ -602,6 +602,16 @@ function renderPlanElement(el, idx, isFrozen) {
   if (el.skaleringMode === 'faktor') {
     const f = asNumber(el.faktor);
     if (f !== 1) modeLabel = `${f.toString().replace('.', ',')}×`;
+    const validProds = (el.produkter || []).filter(p => asNumber(p.antall) > 0 && asNumber(p.vektPerStk) > 0);
+    if (validProds.length > 0 && info.scaledDeigvekt > 0) {
+      const prodTekst = validProds.map(p => `${p.antall}× ${p.navn||'produkt'} à ${p.vektPerStk} g`).join(', ');
+      const brukt = Math.round(validProds.reduce((s, p) => s + asNumber(p.antall) * asNumber(p.vektPerStk), 0));
+      const rest = Math.round(info.scaledDeigvekt) - brukt;
+      modeLabel += (modeLabel ? ' · ' : '') + `Produkter: ${prodTekst}`;
+      modeLabel += rest < 0
+        ? ` · <span style="color:#c0392b">Restdeig: ${rest} g ⚠</span>`
+        : ` · Restdeig: ${rest} g`;
+    }
   }
   else if (el.skaleringMode === 'vekt') modeLabel = `${Math.round(info.scaledDeigvekt)} g deig`;
   else if (el.skaleringMode === 'produkter') {
@@ -674,10 +684,29 @@ function renderPlanElementEditor(el, idx, baseDeigvekt) {
         <button class="scale-mode-btn ${mode==='produkter'?'active':''}" onclick="setScaleMode(${idx}, 'produkter')">Produkter</button>
       </div>
 
-      ${mode === 'faktor' ? `
+      ${mode === 'faktor' ? (() => {
+        const f = asNumber(el.faktor || 1);
+        const totalDeig = baseDeigvekt > 0 ? Math.round(f * baseDeigvekt) : 0;
+        const prods = el.produkter || [];
+        const brukt = Math.round(prods.reduce((s, p) => s + asNumber(p.antall) * asNumber(p.vektPerStk), 0));
+        const rest = totalDeig - brukt;
+        const prodRows = prods.map((p, pi) => `
+          <div class="product-row">
+            <input type="text" class="prod-navn" placeholder="Navn (f.eks. Baguett)" value="${p.navn||''}" oninput="updateProductField(${idx},${pi},'navn',this.value)">
+            <input type="text" class="prod-antall" placeholder="Antall" value="${p.antall||''}" oninput="updateProductField(${idx},${pi},'antall',this.value)">
+            <input type="text" class="prod-vekt" placeholder="g/stk" value="${p.vektPerStk||''}" oninput="updateProductField(${idx},${pi},'vektPerStk',this.value)">
+            <button onclick="removeProductRow(${idx},${pi})" title="Fjern">×</button>
+          </div>`).join('');
+        return `
         <label>Multipliser grunnoppskriftens deigvekt (${baseDeigvekt > 0 ? Math.round(baseDeigvekt) : '?'} g) med</label>
-      <input type="text" id="scale-faktor-${idx}" value="${el.faktor || ''}" placeholder="F.eks. 1,5" oninput="updateScaleField(${idx}, 'faktor', this.value)" onblur="commitPlanEdit()">
-      ` : ''}
+        <input type="text" id="scale-faktor-${idx}" value="${el.faktor || ''}" placeholder="F.eks. 1,5" oninput="updateScaleField(${idx}, 'faktor', this.value)" onblur="commitPlanEdit()">
+        ${totalDeig > 0 ? `<p class="muted" style="margin-top:4px;font-size:13px">Total deigvekt: <strong>${totalDeig} g</strong></p>` : ''}
+        <p style="font-weight:500;margin:10px 0 4px;font-size:13px">Produkter (valgfritt)</p>
+        <div class="product-row-header"><span>Navn</span><span>Antall</span><span>g/stk</span><span></span></div>
+        <div id="product-rows-${idx}">${prodRows}</div>
+        <button class="btn" style="margin-top:6px;font-size:12px;padding:4px 10px" onclick="addProductRow(${idx})">+ Legg til produkt</button>
+        ${brukt > 0 && totalDeig > 0 ? `<p style="margin-top:8px;font-size:13px${rest < 0 ? ';color:#c0392b' : ''}">Brukt: ${brukt} g · <strong>Restdeig: ${rest} g</strong>${rest < 0 ? ' ⚠ Over kapasitet' : ''}</p>` : ''}`;
+      })() : ''}
 
       ${mode === 'produkter' ? `
         <label>Produkter fra denne deigen</label>
@@ -1744,6 +1773,15 @@ function saveCurrentElementEdits() {
   if (el.skaleringMode === 'faktor') {
     const inp = document.getElementById(`scale-faktor-${idx}`);
     if (inp) el.faktor = inp.value;
+    const navnInputs = document.querySelectorAll(`#product-rows-${idx} .prod-navn`);
+    const antallInputs = document.querySelectorAll(`#product-rows-${idx} .prod-antall`);
+    const vektInputs = document.querySelectorAll(`#product-rows-${idx} .prod-vekt`);
+    if (navnInputs.length > 0) {
+      el.produkter = [];
+      navnInputs.forEach((ni, i) => {
+        el.produkter.push({ navn: ni.value, antall: antallInputs[i]?.value||'', vektPerStk: vektInputs[i]?.value||'' });
+      });
+    }
   }
   if (el.skaleringMode === 'vekt') {
     const inp = document.getElementById(`scale-malvekt-${idx}`);
