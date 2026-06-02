@@ -601,16 +601,17 @@ function renderPlanElement(el, idx, isFrozen) {
   let modeLabel = '';
   if (el.skaleringMode === 'faktor') {
     const f = asNumber(el.faktor);
-    if (f !== 1) modeLabel = `${f.toString().replace('.', ',')}×`;
     const validProds = (el.produkter || []).filter(p => asNumber(p.antall) > 0 && asNumber(p.vektPerStk) > 0);
     if (validProds.length > 0 && info.scaledDeigvekt > 0) {
       const prodTekst = validProds.map(p => `${p.antall}× ${p.navn||'produkt'} à ${p.vektPerStk} g`).join(', ');
       const brukt = Math.round(validProds.reduce((s, p) => s + asNumber(p.antall) * asNumber(p.vektPerStk), 0));
       const rest = Math.round(info.scaledDeigvekt) - brukt;
-      modeLabel += (modeLabel ? ' · ' : '') + `Produkter: ${prodTekst}`;
+      modeLabel = `Produkter: ${prodTekst}`;
       modeLabel += rest < 0
         ? ` · <span style="color:#c0392b">Restdeig: ${rest} g ⚠</span>`
         : ` · Restdeig: ${rest} g`;
+    } else if (f !== 1) {
+      modeLabel = `${f.toString().replace('.', ',')}×`;
     }
   }
   else if (el.skaleringMode === 'vekt') modeLabel = `${Math.round(info.scaledDeigvekt)} g deig`;
