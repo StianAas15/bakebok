@@ -64,6 +64,36 @@ export async function loadAppSettings() {
   });
 }
 
+export async function loadMasterIngredients() {
+  const snap = await getDocs(collection(db, 'masterIngredients'));
+  state.masterIngredients = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'nb'));
+}
+
+export async function loadIngredientAliases() {
+  const snap = await getDocs(collection(db, 'ingredientAliases'));
+  state.ingredientAliases = {};
+  snap.docs.forEach(d => {
+    const data = d.data();
+    if (data.normalizedAlias) state.ingredientAliases[data.normalizedAlias] = { id: d.id, ...data };
+  });
+}
+
+export async function saveMasterIngredient(master) {
+  await setDoc(doc(db, 'masterIngredients', master.id), master);
+  await loadMasterIngredients();
+}
+
+export async function saveIngredientAlias(alias) {
+  await setDoc(doc(db, 'ingredientAliases', alias.id), alias);
+  await loadIngredientAliases();
+}
+
+export async function deleteIngredientAlias(id) {
+  await deleteDoc(doc(db, 'ingredientAliases', id));
+  await loadIngredientAliases();
+}
+
 export async function loadIngredientRoles() {
   const snap = await getDocs(collection(db, 'ingredient_roles'));
   state.ingredientRoles = {};

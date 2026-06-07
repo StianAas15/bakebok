@@ -22,6 +22,8 @@ import {
   loadRecipes, loadCustomCategories, loadBakeries,
   loadBakeryPrices, loadBakeryPlans, loadBakeryStandardTasks,
   loadAppSettings, loadIngredientRoles,
+  loadMasterIngredients, loadIngredientAliases,
+  saveMasterIngredient, saveIngredientAlias, deleteIngredientAlias,
   saveRecipeToDb, deleteRecipeFromDb, uploadFile
 } from './data.js';
 
@@ -61,12 +63,14 @@ function render() {
     state.view === 'edit' ? editView() :
     state.view === 'recipe' ? recipeView() :
     state.view === 'recipes' ? recipesView() :
+    state.view === 'ing_revision' ? ingredientRevisionView() :
     homeView()
   }</div>`;
   if (state.view === 'edit') bindEdit();
   if (state.view === 'settings') bindSettings();
   if (state.view === 'roles') bindRoles();
   if (state.view === 'bakery_prices') bindPrices();
+  if (state.view === 'ing_revision') bindIngRevision();
 }
 
 // =====================================================================
@@ -160,6 +164,10 @@ function homeView() {
       <div class="card card-clickable" onclick="setView('roles')" style="margin-bottom:12px">
         <p style="font-weight:500;margin-bottom:4px">Råvarer</p>
         <p class="muted" style="margin-bottom:0">${Object.keys(state.ingredientRoles).length} ingredienser. Klikk for å redigere roller og tettheter.</p>
+      </div>
+      <div class="card card-clickable" onclick="openIngRevision()" style="margin-bottom:12px">
+        <p style="font-weight:500;margin-bottom:4px">Ingrediens-revisjon</p>
+        <p class="muted" style="margin-bottom:0">Koble variantnavn til standardingrediens for prisberegning og statistikk.</p>
       </div>`;
 }
 
@@ -841,6 +849,316 @@ function rolesView() {
       <button class="btn-primary" style="width:100%;margin-top:12px" onclick="saveAllRoleEdits()">Lagre endringer</button>
     </div>
     ${state.statusMsg?`<p class="status">${state.statusMsg}</p>`:''}`;
+}
+
+// =====================================================================
+// INGREDIENS-REVISJON
+// =====================================================================
+
+function getIngredientUsageMap() {
+  const map = {};
+  for (const r of state.recipes) {
+    for (const v of r.versions) {
+      const parts = getVersionParts(v);
+      for (const part of parts) {
+        for (const ing of (part.ingredientsList || [])) {
+          if (!ing.navn || !ing.navn.trim()) continue;
+          const display = ing.navn.trim();
+          const key = display.toLowerCase();
+          if (!map[key]) {
+            const roleData = state.ingredientRoles[key];
+            map[key] = { key, displayName: display, count: 0, recipes: [], role: '' };
+            if (roleData) map[key].role = roleData.rolle;
+          }
+          map[key].count++;
+          if (!map[key].recipes.find(rx => rx.id === r.id)) map[key].recipes.push({ id: r.id, name: r.name });
+          if (!map[key].role && ing.rolle) map[key].role = ing.rolle;
+        }
+      }
+    }
+  }
+  return map;
+}
+
+function getRoleLabel(rolle) {
+  if (!rolle) return '';
+  const opt = ROLE_OPTIONS.find(r => r.id === rolle);
+  return opt ? opt.label : rolle;
+}
+
+function ingredientRevisionView() {
+  const usageMap = getIngredientUsageMap();
+  const search = (state.ingRevisionSearch || '').toLowerCase();
+  const filter = state.ingRevisionFilter || 'all';
+  const sort = state.ingRevisionSort || 'count';
+  const editingKey = state.ingRevisionEditing;
+  const editMasterId = state.ingRevisionEditMasterId || '';
+  const editNewName = state.ingRevisionEditNewName || '';
+  const checked = state.ingRevisionChecked || {};
+
+  let entries = Object.values(usageMap);
+  if (search) entries = entries.filter(e => e.key.includes(search) || e.displayName.toLowerCase().includes(search));
+  if (filter === 'unmapped') entries = entries.filter(e => !state.ingredientAliases[e.key]);
+  if (filter === 'mapped') entries = entries.filter(e => !!state.ingredientAliases[e.key]);
+  entries = entries.sort(sort === 'count'
+    ? (a, b) => b.count - a.count || a.key.localeCompare(b.key, 'nb')
+    : (a, b) => a.key.localeCompare(b.key, 'nb'));
+
+  const totalCount = Object.keys(usageMap).length;
+  const unmappedCount = Object.values(usageMap).filter(e => !state.ingredientAliases[e.key]).length;
+  const checkedKeys = Object.keys(checked).filter(k => checked[k]);
+
+  const masterOpts = state.masterIngredients.map(m =>
+    `<option value="${m.id}" ${editMasterId===m.id?'selected':''}>${m.name}</option>`).join('');
+
+  const multiBar = checkedKeys.length > 0 ? `
+    <div class="ing-rev-multibar">
+      <span>${checkedKeys.length} valgt</span>
+      <select id="ing-rev-multi-sel">
+        <option value="">– Koble til standardingrediens –</option>
+        ${state.masterIngredients.map(m => `<option value="${m.id}">${m.name}</option>`).join('')}
+        <option value="__new">+ Opprett ny standardingrediens...</option>
+      </select>
+      <input id="ing-rev-multi-new" type="text" placeholder="Navn på ny standardingrediens" style="display:none">
+      <button class="btn-primary" onclick="saveIngRevMultiMapping()">Koble valgte</button>
+      <button class="btn" onclick="clearIngRevChecks()">Avbryt</button>
+    </div>` : '';
+
+  const rows = entries.map(e => {
+    const alias = state.ingredientAliases[e.key];
+    const isEditing = editingKey === e.key;
+    const isChecked = !!checked[e.key];
+    const mappingHtml = alias
+      ? `<span class="ing-rev-mapped">✓ ${alias.masterIngredientName}</span>`
+      : `<span class="ing-rev-unmapped muted">Ukoblet</span>`;
+
+    let editForm = '';
+    if (isEditing) {
+      const showNewInput = editMasterId === '__new';
+      editForm = `
+        <div class="ing-rev-edit-form">
+          <select id="ing-rev-sel-${e.key.replace(/[^a-z0-9]/g,'_')}" onchange="ingRevMasterChange('${e.key.replace(/'/g,"\\'")}',this.value)">
+            <option value="">– Velg standardingrediens –</option>
+            ${masterOpts}
+            <option value="__new" ${editMasterId==='__new'?'selected':''}>+ Opprett ny...</option>
+          </select>
+          ${showNewInput ? `<input id="ing-rev-new-name" type="text" placeholder="Navn på ny standardingrediens" value="${editNewName}" oninput="ingRevNewNameInput(this.value)">` : ''}
+          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+            <button class="btn-primary" onclick="saveIngRevMapping('${e.key.replace(/'/g,"\\'")}')">Lagre</button>
+            <button class="btn" onclick="cancelIngRevEdit()">Avbryt</button>
+            ${alias ? `<button class="btn-danger" style="padding:4px 8px;font-size:12px" onclick="removeIngRevMapping('${e.key.replace(/'/g,"\\'")}')">Fjern kobling</button>` : ''}
+          </div>
+        </div>`;
+    }
+
+    return `
+      <div class="ing-rev-row ${isEditing?'ing-rev-editing':''}">
+        <div class="ing-rev-check">
+          <input type="checkbox" ${isChecked?'checked':''} onchange="toggleIngRevCheck('${e.key.replace(/'/g,"\\'")}',this.checked)">
+        </div>
+        <div class="ing-rev-info">
+          <span class="ing-rev-name">${e.displayName}</span>
+          <span class="ing-rev-count">${e.count}×</span>
+          ${e.role ? `<span class="ing-rev-role">${getRoleLabel(e.role)}</span>` : ''}
+          <span class="ing-rev-recipes muted">${e.recipes.map(r => r.name).join(' · ')}</span>
+        </div>
+        <div class="ing-rev-mapping">${mappingHtml}</div>
+        <div class="ing-rev-actions">
+          ${!isEditing ? `<button class="btn" style="padding:4px 8px;font-size:12px" onclick="startIngRevEdit('${e.key.replace(/'/g,"\\'")}')">Koble</button>` : ''}
+        </div>
+        ${editForm}
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="topbar no-print"><button class="btn" onclick="setView('settings')">← Tilbake</button></div>
+    <h2>Ingrediens-revisjon</h2>
+    <div class="card">
+      <p class="muted" style="margin-bottom:8px">${totalCount} unike ingrediensnavn · ${unmappedCount} ukoblet</p>
+      <input type="text" id="ing-rev-search" placeholder="Søk etter ingrediensnavn..." value="${state.ingRevisionSearch || ''}" style="margin-bottom:10px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+        <button class="btn ${filter==='all'?'btn-active':''}" onclick="setIngRevFilter('all')">Alle (${totalCount})</button>
+        <button class="btn ${filter==='unmapped'?'btn-active':''}" onclick="setIngRevFilter('unmapped')">Ukoblet (${unmappedCount})</button>
+        <button class="btn ${filter==='mapped'?'btn-active':''}" onclick="setIngRevFilter('mapped')">Koblet (${totalCount-unmappedCount})</button>
+        <span style="margin-left:auto;display:flex;gap:6px">
+          <button class="btn ${sort==='count'?'btn-active':''}" onclick="setIngRevSort('count')">Sorter: Antall</button>
+          <button class="btn ${sort==='name'?'btn-active':''}" onclick="setIngRevSort('name')">Navn</button>
+        </span>
+      </div>
+    </div>
+    ${multiBar}
+    ${state.statusMsg?`<p class="status">${state.statusMsg}</p>`:''}
+    <div class="card" style="padding:0">
+      ${entries.length === 0
+        ? `<p class="muted" style="padding:16px">Ingen ingredienser å vise.</p>`
+        : rows}
+    </div>`;
+}
+
+function bindIngRevision() {
+  const searchEl = document.getElementById('ing-rev-search');
+  if (searchEl) {
+    searchEl.addEventListener('input', e => {
+      state.ingRevisionSearch = e.target.value;
+      const cursor = e.target.selectionStart;
+      render();
+      const el2 = document.getElementById('ing-rev-search');
+      if (el2) { el2.focus(); el2.setSelectionRange(cursor, cursor); }
+    });
+  }
+  const multiSel = document.getElementById('ing-rev-multi-sel');
+  if (multiSel) {
+    multiSel.addEventListener('change', () => {
+      const newInp = document.getElementById('ing-rev-multi-new');
+      if (newInp) newInp.style.display = multiSel.value === '__new' ? '' : 'none';
+    });
+  }
+}
+
+function setIngRevFilter(f) { state.ingRevisionFilter = f; render(); }
+function setIngRevSort(s) { state.ingRevisionSort = s; render(); }
+
+function toggleIngRevCheck(key, checked) {
+  if (!state.ingRevisionChecked) state.ingRevisionChecked = {};
+  state.ingRevisionChecked[key] = checked;
+  render();
+}
+
+function clearIngRevChecks() {
+  state.ingRevisionChecked = {};
+  render();
+}
+
+function startIngRevEdit(key) {
+  const alias = state.ingredientAliases[key];
+  state.ingRevisionEditing = key;
+  state.ingRevisionEditMasterId = alias ? alias.masterIngredientId : '';
+  state.ingRevisionEditNewName = '';
+  render();
+}
+
+function cancelIngRevEdit() {
+  state.ingRevisionEditing = null;
+  state.ingRevisionEditMasterId = '';
+  state.ingRevisionEditNewName = '';
+  render();
+}
+
+function ingRevMasterChange(key, value) {
+  state.ingRevisionEditMasterId = value;
+  render();
+  setTimeout(() => {
+    const selId = `ing-rev-sel-${key.replace(/[^a-z0-9]/g,'_')}`;
+    const sel = document.getElementById(selId);
+    if (sel) sel.value = value;
+  }, 0);
+}
+
+function ingRevNewNameInput(value) {
+  state.ingRevisionEditNewName = value;
+}
+
+async function saveIngRevMapping(key) {
+  const usageMap = getIngredientUsageMap();
+  const entry = usageMap[key];
+  if (!entry) return;
+  let masterId = state.ingRevisionEditMasterId;
+  let masterName = '';
+  if (!masterId) { setStatus('Velg en standardingrediens eller opprett ny.'); return; }
+  if (masterId === '__new') {
+    const newName = state.ingRevisionEditNewName.trim();
+    if (!newName) { setStatus('Skriv inn navn på ny standardingrediens.'); return; }
+    masterId = `master_${Date.now()}`;
+    const master = {
+      id: masterId, name: newName, normalizedName: newName.toLowerCase(),
+      role: entry.role || '', active: true,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    };
+    await saveMasterIngredient(master);
+    masterName = newName;
+  } else {
+    const master = state.masterIngredients.find(m => m.id === masterId);
+    if (!master) return;
+    masterName = master.name;
+  }
+  const existing = state.ingredientAliases[key];
+  const alias = {
+    id: existing ? existing.id : `alias_${Date.now()}`,
+    aliasName: entry.displayName, normalizedAlias: key,
+    masterIngredientId: masterId, masterIngredientName: masterName,
+    updatedAt: new Date().toISOString()
+  };
+  await saveIngredientAlias(alias);
+  state.ingRevisionEditing = null;
+  state.ingRevisionEditMasterId = '';
+  state.ingRevisionEditNewName = '';
+  setStatus('Kobling lagret.');
+  setTimeout(() => { state.statusMsg = ''; render(); }, 2000);
+}
+
+async function removeIngRevMapping(key) {
+  const alias = state.ingredientAliases[key];
+  if (!alias) return;
+  await deleteIngredientAlias(alias.id);
+  state.ingRevisionEditing = null;
+  setStatus('Kobling fjernet.');
+  setTimeout(() => { state.statusMsg = ''; render(); }, 2000);
+}
+
+async function saveIngRevMultiMapping() {
+  const multiSel = document.getElementById('ing-rev-multi-sel');
+  if (!multiSel) return;
+  let masterId = multiSel.value;
+  if (!masterId) { setStatus('Velg en standardingrediens.'); return; }
+  let masterName = '';
+  if (masterId === '__new') {
+    const newInp = document.getElementById('ing-rev-multi-new');
+    const newName = newInp ? newInp.value.trim() : '';
+    if (!newName) { setStatus('Skriv inn navn på ny standardingrediens.'); return; }
+    masterId = `master_${Date.now()}`;
+    const master = {
+      id: masterId, name: newName, normalizedName: newName.toLowerCase(),
+      role: '', active: true,
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    };
+    await saveMasterIngredient(master);
+    masterName = newName;
+  } else {
+    const master = state.masterIngredients.find(m => m.id === masterId);
+    if (!master) return;
+    masterName = master.name;
+  }
+  const usageMap = getIngredientUsageMap();
+  const checkedKeys = Object.keys(state.ingRevisionChecked).filter(k => state.ingRevisionChecked[k]);
+  for (const key of checkedKeys) {
+    const entry = usageMap[key];
+    if (!entry) continue;
+    const existing = state.ingredientAliases[key];
+    const alias = {
+      id: existing ? existing.id : `alias_${Date.now()}_${key.replace(/[^a-z0-9]/g,'')}`,
+      aliasName: entry.displayName, normalizedAlias: key,
+      masterIngredientId: masterId, masterIngredientName: masterName,
+      updatedAt: new Date().toISOString()
+    };
+    await saveIngredientAlias(alias);
+  }
+  state.ingRevisionChecked = {};
+  setStatus(`${checkedKeys.length} koblinger lagret.`);
+  setTimeout(() => { state.statusMsg = ''; render(); }, 2000);
+}
+
+async function openIngRevision() {
+  state.ingRevisionSearch = '';
+  state.ingRevisionFilter = 'unmapped';
+  state.ingRevisionSort = 'count';
+  state.ingRevisionChecked = {};
+  state.ingRevisionEditing = null;
+  state.loading = true;
+  render();
+  await Promise.all([loadMasterIngredients(), loadIngredientAliases()]);
+  state.loading = false;
+  state.view = 'ing_revision';
+  render();
 }
 
 function recipeView() {
@@ -2195,7 +2513,11 @@ Object.assign(window,{
   addRecipeToPlan, addNewStandardTask, deleteStandardTask, addCheckedTasksToPlan,
   toggleElementDone, removeElement, moveElement, editElement, cancelEditElement,
   addScanImages, removeScanImage, clearScanBuffer, sendScanBuffer,
- setScaleMode, updateScaleField, updateProductField, commitPlanEdit, commitAnd, printPlan, addProductRow, removeProductRow,
+  setScaleMode, updateScaleField, updateProductField, commitPlanEdit, commitAnd, printPlan, addProductRow, removeProductRow,
+  openIngRevision, setIngRevFilter, setIngRevSort, toggleIngRevCheck, clearIngRevChecks,
+  startIngRevEdit, cancelIngRevEdit, ingRevMasterChange, ingRevNewNameInput,
+  saveIngRevMapping, removeIngRevMapping, saveIngRevMultiMapping,
+  addPart, removePart,
 });
 
 renderRef.fn = render;
