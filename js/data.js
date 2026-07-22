@@ -64,24 +64,13 @@ export async function loadAppSettings() {
   });
 }
 
-export async function loadMasterIngredients() {
-  const snap = await getDocs(collection(db, 'masterIngredients'));
-  state.masterIngredients = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'nb'));
-}
-
 export async function loadIngredientAliases() {
   const snap = await getDocs(collection(db, 'ingredientAliases'));
   state.ingredientAliases = {};
   snap.docs.forEach(d => {
     const data = d.data();
-    if (data.normalizedAlias) state.ingredientAliases[data.normalizedAlias] = { id: d.id, ...data };
+    if (data.aliasNorm) state.ingredientAliases[data.aliasNorm] = { id: d.id, ...data };
   });
-}
-
-export async function saveMasterIngredient(master) {
-  await setDoc(doc(db, 'masterIngredients', master.id), master);
-  await loadMasterIngredients();
 }
 
 export async function saveIngredientAlias(alias) {

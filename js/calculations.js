@@ -3,25 +3,64 @@ import { asNumber, fmtPct, fmtPct1 } from './utils.js';
 import { state } from './state.js';
 
 // =====================================================================
-// Oppslag i ingredienslista (avhenger av state.ingredientRoles)
+// Normalisering og identitet for ingredienser
+//
+// Målet: "hvetemel siktet", "siktet hvetemel" og "Hvetemel, siktet" skal
+// automatisk regnes som samme ingrediens. Ekte synonymer ("Ølandshvete
+// siktet" = "siktet hvetemel") dekkes av state.ingredientAliases, som
+// peker et normalisert variantnavn til et kanonisk navn.
 // =====================================================================
 
-export function lookupRole(navn) {
+export function normalizeIngredientName(navn) {
   if (!navn) return '';
-  const key = navn.trim().toLowerCase();
-  if (state.ingredientRoles[key]) return state.ingredientRoles[key].rolle;
+  return navn
+    .toLowerCase()
+    .replace(/[.,;:()/\-]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .sort()
+    .join(' ');
+}
+
+// Returnerer det kanoniske (normaliserte) navnet et ingrediensnavn peker til.
+// Følger alias-kjeder ett steg: variant -> kanonisk.
+export function resolveIngredientName(navn) {
+  const norm = normalizeIngredientName(navn);
+  const alias = state.ingredientAliases[norm];
+  if (alias && alias.canonicalNavn) return normalizeIngredientName(alias.canonicalNavn);
+  return norm;
+}
+
+// Finner rolle-/tetthet-oppføringen for et ingrediensnavn, via normalisering
+// og alias. state.ingredientRoles er nøklet på lowercased navn.
+export function findRoleData(navn) {
+  if (!navn) return null;
+  const target = resolveIngredientName(navn);
+  if (!target) return null;
   for (const [name, data] of Object.entries(state.ingredientRoles)) {
-    if (key.includes(name) || name.includes(key)) return data.rolle;
+    if (normalizeIngredientName(name) === target) return data;
   }
-  return '';
+  return null;
+}
+
+export function lookupRole(navn) {
+  const data = findRoleData(navn);
+  return data ? data.rolle : '';
 }
 
 export function lookupTetthet(navn) {
+  const data = findRoleData(navn);
+  return data ? data.tetthet : null;
+}
+
+// Finner prisdata for et ingrediensnavn via samme identitetslogikk.
+// state.bakeryPrices er nøklet på lowercased navn.
+export function findPriceData(navn) {
   if (!navn) return null;
-  const key = navn.trim().toLowerCase();
-  if (state.ingredientRoles[key]) return state.ingredientRoles[key].tetthet;
-  for (const [name, data] of Object.entries(state.ingredientRoles)) {
-    if (key.includes(name) || name.includes(key)) return data.tetthet;
+  const target = resolveIngredientName(navn);
+  if (!target) return null;
+  for (const [name, data] of Object.entries(state.bakeryPrices)) {
+    if (normalizeIngredientName(name) === target) return data;
   }
   return null;
 }
@@ -174,8 +213,7 @@ export function calcRecipeCost(ingList) {
   const unknownNames = [];
   for (const ing of ingList) {
     if (!ing.navn || asNumber(ing.mengde) === 0) continue;
-    const navnKey = ing.navn.trim().toLowerCase();
-    const prisData = state.bakeryPrices[navnKey];
+    const prisData = findPriceData(ing.navn);
     if (prisData) {
       const cost = ingredientCost(ing, prisData);
       if (cost !== null) { totalCost += cost; knownCount++; }
