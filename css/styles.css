@@ -225,11 +225,9 @@ img.recipe-img { width: 100%; border-radius: 8px; margin-bottom: 8px; }
    ===================================================================== */
 .btn-active { background: #1D9E75; color: #fff; border-color: #1D9E75; }
 .btn-active:hover { background: #178a63; }
-.ing-rev-row { display: grid; grid-template-columns: 28px 1fr auto auto; grid-template-rows: auto auto; gap: 0 8px; align-items: start; padding: 10px 16px; border-bottom: 0.5px solid #e0e0d8; }
+.ing-rev-row { display: grid; grid-template-columns: 1fr auto auto; grid-template-rows: auto auto; gap: 0 8px; align-items: start; padding: 10px 16px; border-bottom: 0.5px solid #e0e0d8; }
 .ing-rev-row:last-child { border-bottom: none; }
 .ing-rev-row.ing-rev-editing { background: #f9faf8; }
-.ing-rev-check { padding-top: 2px; }
-.ing-rev-check input { width: auto; }
 .ing-rev-info { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .ing-rev-name { font-weight: 500; font-size: 14px; }
 .ing-rev-count { font-size: 12px; background: #e8f5f0; color: #1D9E75; border-radius: 10px; padding: 1px 7px; }
@@ -238,5 +236,4 @@ img.recipe-img { width: 100%; border-radius: 8px; margin-bottom: 8px; }
 .ing-rev-mapping { font-size: 13px; padding-top: 2px; }
 .ing-rev-mapped { color: #1D9E75; font-weight: 500; }
 .ing-rev-actions { display: flex; gap: 4px; }
-.ing-rev-edit-form { grid-column: 2 / -1; margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
-.ing-rev-multibar { background: #fff8e7; border: 1px solid #f0d080; border-radius: 10px; padding: 10px 14px; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ing-rev-edit-form { grid-column: 1 / -1; margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
