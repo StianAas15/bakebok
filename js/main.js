@@ -15,15 +15,15 @@ import {
   lookupRole, lookupTetthet, tilGram, formatIngredientWithConv,
   calcBakePcts, ingredientPct, shouldShowBakePct, bakePctSummaryHtml,
   pricePerGram, ingredientCost, calcRecipeCost,
-  scaleIngredients, calcFaktor, getRecipeDataForElement, calcElementInfo, calcPlanCosts
+  scaleIngredients, calcFaktor, getRecipeDataForElement, calcElementInfo, calcPlanCosts,
+  normalizeIngredientName, resolveIngredientName, findRoleData
 } from './calculations.js';
 
 import {
   loadRecipes, loadCustomCategories, loadBakeries,
   loadBakeryPrices, loadBakeryPlans, loadBakeryStandardTasks,
   loadAppSettings, loadIngredientRoles,
-  loadMasterIngredients, loadIngredientAliases,
-  saveMasterIngredient, saveIngredientAlias, deleteIngredientAlias,
+  loadIngredientAliases, saveIngredientAlias, deleteIngredientAlias,
   saveRecipeToDb, deleteRecipeFromDb, uploadFile
 } from './data.js';
 
@@ -889,83 +889,68 @@ function getRoleLabel(rolle) {
 function ingredientRevisionView() {
   const usageMap = getIngredientUsageMap();
   const search = (state.ingRevisionSearch || '').toLowerCase();
-  const filter = state.ingRevisionFilter || 'all';
-  const sort = state.ingRevisionSort || 'count';
-  const editingKey = state.ingRevisionEditing;
-  const editMasterId = state.ingRevisionEditMasterId || '';
-  const editNewName = state.ingRevisionEditNewName || '';
-  const checked = state.ingRevisionChecked || {};
-
   let entries = Object.values(usageMap);
-  if (search) entries = entries.filter(e => e.key.includes(search) || e.displayName.toLowerCase().includes(search));
-  if (filter === 'unmapped') entries = entries.filter(e => !state.ingredientAliases[e.key]);
-  if (filter === 'mapped') entries = entries.filter(e => !!state.ingredientAliases[e.key]);
-  entries = entries.sort(sort === 'count'
-    ? (a, b) => b.count - a.count || a.key.localeCompare(b.key, 'nb')
-    : (a, b) => a.key.localeCompare(b.key, 'nb'));
+  if (search) entries = entries.filter(e => e.key.includes(search));
+  entries.sort((a, b) => {
+    const ak = findRoleData(a.displayName) ? 1 : 0;
+    const bk = findRoleData(b.displayName) ? 1 : 0;
+    if (ak !== bk) return ak - bk; // ukjente først
+    return b.count - a.count;
+  });
 
-  const totalCount = Object.keys(usageMap).length;
-  const unmappedCount = Object.values(usageMap).filter(e => !state.ingredientAliases[e.key]).length;
-  const checkedKeys = Object.keys(checked).filter(k => checked[k]);
-
-  const masterOpts = state.masterIngredients.map(m =>
-    `<option value="${m.id}" ${editMasterId===m.id?'selected':''}>${m.name}</option>`).join('');
-
-  const multiBar = checkedKeys.length > 0 ? `
-    <div class="ing-rev-multibar">
-      <span>${checkedKeys.length} valgt</span>
-      <select id="ing-rev-multi-sel">
-        <option value="">– Koble til standardingrediens –</option>
-        ${state.masterIngredients.map(m => `<option value="${m.id}">${m.name}</option>`).join('')}
-        <option value="__new">+ Opprett ny standardingrediens...</option>
-      </select>
-      <input id="ing-rev-multi-new" type="text" placeholder="Navn på ny standardingrediens" style="display:none">
-      <button class="btn-primary" onclick="saveIngRevMultiMapping()">Koble valgte</button>
-      <button class="btn" onclick="clearIngRevChecks()">Avbryt</button>
-    </div>` : '';
+  const total = Object.keys(usageMap).length;
+  const unknown = Object.values(usageMap).filter(e => !findRoleData(e.displayName)).length;
+  const knownNames = Object.keys(state.ingredientRoles).sort((a, b) => a.localeCompare(b, 'nb'));
 
   const rows = entries.map(e => {
-    const alias = state.ingredientAliases[e.key];
-    const isEditing = editingKey === e.key;
-    const isChecked = !!checked[e.key];
-    const mappingHtml = alias
-      ? `<span class="ing-rev-mapped">✓ ${alias.masterIngredientName}</span>`
-      : `<span class="ing-rev-unmapped muted">Ukoblet</span>`;
+    const norm = normalizeIngredientName(e.displayName);
+    const alias = state.ingredientAliases[norm];
+    const roleData = findRoleData(e.displayName);
+    const isEditing = state.ingRevisionEditing === e.key;
+    const esc = e.key.replace(/'/g, "\\'");
+
+    let statusHtml;
+    if (alias) {
+      statusHtml = `<span class="ing-rev-mapped">synonym → ${alias.canonicalNavn}</span>`;
+    } else if (roleData) {
+      statusHtml = `<span class="ing-rev-mapped">✓ gjenkjent${roleData.rolle ? ' · ' + getRoleLabel(roleData.rolle) : ''}</span>`;
+    } else {
+      statusHtml = `<span class="ing-rev-unmapped muted">ukjent – ingen rolle/pris</span>`;
+    }
 
     let editForm = '';
     if (isEditing) {
-      const showNewInput = editMasterId === '__new';
+      const opts = knownNames
+        .filter(n => normalizeIngredientName(n) !== norm)
+        .map(n => `<option value="${n}" ${state.ingRevisionEditCanonical === n ? 'selected' : ''}>${n}</option>`).join('');
       editForm = `
         <div class="ing-rev-edit-form">
-          <select id="ing-rev-sel-${e.key.replace(/[^a-z0-9]/g,'_')}" onchange="ingRevMasterChange('${e.key.replace(/'/g,"\\'")}',this.value)">
-            <option value="">– Velg standardingrediens –</option>
-            ${masterOpts}
-            <option value="__new" ${editMasterId==='__new'?'selected':''}>+ Opprett ny...</option>
+          <label style="margin:0">Samme råvare som:</label>
+          <select id="ing-rev-canon" onchange="ingRevCanonChange(this.value)">
+            <option value="">– velg kjent råvare –</option>
+            ${opts}
           </select>
-          ${showNewInput ? `<input id="ing-rev-new-name" type="text" placeholder="Navn på ny standardingrediens" value="${editNewName}" oninput="ingRevNewNameInput(this.value)">` : ''}
           <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
-            <button class="btn-primary" onclick="saveIngRevMapping('${e.key.replace(/'/g,"\\'")}')">Lagre</button>
+            <button class="btn-primary" onclick="saveIngRevMapping('${esc}')">Lagre synonym</button>
             <button class="btn" onclick="cancelIngRevEdit()">Avbryt</button>
-            ${alias ? `<button class="btn-danger" style="padding:4px 8px;font-size:12px" onclick="removeIngRevMapping('${e.key.replace(/'/g,"\\'")}')">Fjern kobling</button>` : ''}
+            ${alias ? `<button class="btn-danger" style="padding:4px 8px;font-size:12px" onclick="removeIngRevMapping('${esc}')">Fjern synonym</button>` : ''}
           </div>
         </div>`;
     }
 
+    const actionBtn = !isEditing
+      ? `<button class="btn" style="padding:4px 8px;font-size:12px" onclick="startIngRevEdit('${esc}')">${alias ? 'Endre' : 'Koble'}</button>`
+      : '';
+
     return `
-      <div class="ing-rev-row ${isEditing?'ing-rev-editing':''}">
-        <div class="ing-rev-check">
-          <input type="checkbox" ${isChecked?'checked':''} onchange="toggleIngRevCheck('${e.key.replace(/'/g,"\\'")}',this.checked)">
-        </div>
+      <div class="ing-rev-row ${isEditing ? 'ing-rev-editing' : ''}">
         <div class="ing-rev-info">
           <span class="ing-rev-name">${e.displayName}</span>
           <span class="ing-rev-count">${e.count}×</span>
-          ${e.role ? `<span class="ing-rev-role">${getRoleLabel(e.role)}</span>` : ''}
           <span class="ing-rev-recipes muted">${e.recipes.map(r => r.name).join(' · ')}</span>
         </div>
-        <div class="ing-rev-mapping">${mappingHtml}</div>
-        <div class="ing-rev-actions">
-          ${!isEditing ? `<button class="btn" style="padding:4px 8px;font-size:12px" onclick="startIngRevEdit('${e.key.replace(/'/g,"\\'")}')">Koble</button>` : ''}
-        </div>
+        <div class="ing-rev-mapping">${statusHtml}</div>
+        <div class="ing-rev-actions">${actionBtn}</div>
         ${editForm}
       </div>`;
   }).join('');
@@ -974,188 +959,77 @@ function ingredientRevisionView() {
     <div class="topbar no-print"><button class="btn" onclick="setView('settings')">← Tilbake</button></div>
     <h2>Ingrediens-revisjon</h2>
     <div class="card">
-      <p class="muted" style="margin-bottom:8px">${totalCount} unike ingrediensnavn · ${unmappedCount} ukoblet</p>
-      <input type="text" id="ing-rev-search" placeholder="Søk etter ingrediensnavn..." value="${state.ingRevisionSearch || ''}" style="margin-bottom:10px">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-        <button class="btn ${filter==='all'?'btn-active':''}" onclick="setIngRevFilter('all')">Alle (${totalCount})</button>
-        <button class="btn ${filter==='unmapped'?'btn-active':''}" onclick="setIngRevFilter('unmapped')">Ukoblet (${unmappedCount})</button>
-        <button class="btn ${filter==='mapped'?'btn-active':''}" onclick="setIngRevFilter('mapped')">Koblet (${totalCount-unmappedCount})</button>
-        <span style="margin-left:auto;display:flex;gap:6px">
-          <button class="btn ${sort==='count'?'btn-active':''}" onclick="setIngRevSort('count')">Sorter: Antall</button>
-          <button class="btn ${sort==='name'?'btn-active':''}" onclick="setIngRevSort('name')">Navn</button>
-        </span>
-      </div>
+      <p class="muted" style="margin-bottom:8px">${total} unike ingrediensnavn · ${unknown} ukjent. Ulik rekkefølge og skrivemåte kobles automatisk. Ekte synonymer (f.eks. «Ølandshvete siktet» = «siktet hvetemel») kobler du her – én gang per navn.</p>
+      <input type="text" id="ing-rev-search" placeholder="Søk..." value="${state.ingRevisionSearch || ''}">
     </div>
-    ${multiBar}
-    ${state.statusMsg?`<p class="status">${state.statusMsg}</p>`:''}
+    ${state.statusMsg ? `<p class="status">${state.statusMsg}</p>` : ''}
     <div class="card" style="padding:0">
-      ${entries.length === 0
-        ? `<p class="muted" style="padding:16px">Ingen ingredienser å vise.</p>`
-        : rows}
-    </div>`;
+      ${entries.length === 0 ? `<p class="muted" style="padding:16px">Ingen ingredienser.</p>` : rows}
+    </div>
+    <p class="muted" style="font-size:12px;margin-top:8px">Nye råvarer (ikke synonymer) legger du inn under Råvarer med rolle og tetthet.</p>`;
 }
 
 function bindIngRevision() {
-  const searchEl = document.getElementById('ing-rev-search');
-  if (searchEl) {
-    searchEl.addEventListener('input', e => {
-      state.ingRevisionSearch = e.target.value;
-      const cursor = e.target.selectionStart;
-      render();
-      const el2 = document.getElementById('ing-rev-search');
-      if (el2) { el2.focus(); el2.setSelectionRange(cursor, cursor); }
-    });
-  }
-  const multiSel = document.getElementById('ing-rev-multi-sel');
-  if (multiSel) {
-    multiSel.addEventListener('change', () => {
-      const newInp = document.getElementById('ing-rev-multi-new');
-      if (newInp) newInp.style.display = multiSel.value === '__new' ? '' : 'none';
-    });
-  }
-}
-
-function setIngRevFilter(f) { state.ingRevisionFilter = f; render(); }
-function setIngRevSort(s) { state.ingRevisionSort = s; render(); }
-
-function toggleIngRevCheck(key, checked) {
-  if (!state.ingRevisionChecked) state.ingRevisionChecked = {};
-  state.ingRevisionChecked[key] = checked;
-  render();
-}
-
-function clearIngRevChecks() {
-  state.ingRevisionChecked = {};
-  render();
+  const s = document.getElementById('ing-rev-search');
+  if (s) s.addEventListener('input', e => {
+    state.ingRevisionSearch = e.target.value;
+    const c = e.target.selectionStart;
+    render();
+    const s2 = document.getElementById('ing-rev-search');
+    if (s2) { s2.focus(); s2.setSelectionRange(c, c); }
+  });
 }
 
 function startIngRevEdit(key) {
-  const alias = state.ingredientAliases[key];
+  const alias = state.ingredientAliases[normalizeIngredientName(key)];
   state.ingRevisionEditing = key;
-  state.ingRevisionEditMasterId = alias ? alias.masterIngredientId : '';
-  state.ingRevisionEditNewName = '';
+  state.ingRevisionEditCanonical = alias ? alias.canonicalNavn : '';
   render();
 }
 
 function cancelIngRevEdit() {
   state.ingRevisionEditing = null;
-  state.ingRevisionEditMasterId = '';
-  state.ingRevisionEditNewName = '';
+  state.ingRevisionEditCanonical = '';
   render();
 }
 
-function ingRevMasterChange(key, value) {
-  state.ingRevisionEditMasterId = value;
-  render();
-  setTimeout(() => {
-    const selId = `ing-rev-sel-${key.replace(/[^a-z0-9]/g,'_')}`;
-    const sel = document.getElementById(selId);
-    if (sel) sel.value = value;
-  }, 0);
-}
-
-function ingRevNewNameInput(value) {
-  state.ingRevisionEditNewName = value;
+function ingRevCanonChange(v) {
+  state.ingRevisionEditCanonical = v;
 }
 
 async function saveIngRevMapping(key) {
-  const usageMap = getIngredientUsageMap();
-  const entry = usageMap[key];
-  if (!entry) return;
-  let masterId = state.ingRevisionEditMasterId;
-  let masterName = '';
-  if (!masterId) { setStatus('Velg en standardingrediens eller opprett ny.'); return; }
-  if (masterId === '__new') {
-    const newName = state.ingRevisionEditNewName.trim();
-    if (!newName) { setStatus('Skriv inn navn på ny standardingrediens.'); return; }
-    masterId = `master_${Date.now()}`;
-    const master = {
-      id: masterId, name: newName, normalizedName: newName.toLowerCase(),
-      role: entry.role || '', active: true,
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-    };
-    await saveMasterIngredient(master);
-    masterName = newName;
-  } else {
-    const master = state.masterIngredients.find(m => m.id === masterId);
-    if (!master) return;
-    masterName = master.name;
-  }
-  const existing = state.ingredientAliases[key];
+  const canonical = state.ingRevisionEditCanonical;
+  if (!canonical) { setStatus('Velg en kjent råvare.'); return; }
+  const aliasNorm = normalizeIngredientName(key);
+  const existing = state.ingredientAliases[aliasNorm];
   const alias = {
     id: existing ? existing.id : `alias_${Date.now()}`,
-    aliasName: entry.displayName, normalizedAlias: key,
-    masterIngredientId: masterId, masterIngredientName: masterName,
+    aliasNorm, aliasName: key, canonicalNavn: canonical,
     updatedAt: new Date().toISOString()
   };
   await saveIngredientAlias(alias);
   state.ingRevisionEditing = null;
-  state.ingRevisionEditMasterId = '';
-  state.ingRevisionEditNewName = '';
-  setStatus('Kobling lagret.');
-  setTimeout(() => { state.statusMsg = ''; render(); }, 2000);
+  state.ingRevisionEditCanonical = '';
+  setStatus('Synonym lagret.');
+  setTimeout(() => { state.statusMsg = ''; render(); }, 1500);
 }
 
 async function removeIngRevMapping(key) {
-  const alias = state.ingredientAliases[key];
+  const alias = state.ingredientAliases[normalizeIngredientName(key)];
   if (!alias) return;
   await deleteIngredientAlias(alias.id);
   state.ingRevisionEditing = null;
-  setStatus('Kobling fjernet.');
-  setTimeout(() => { state.statusMsg = ''; render(); }, 2000);
-}
-
-async function saveIngRevMultiMapping() {
-  const multiSel = document.getElementById('ing-rev-multi-sel');
-  if (!multiSel) return;
-  let masterId = multiSel.value;
-  if (!masterId) { setStatus('Velg en standardingrediens.'); return; }
-  let masterName = '';
-  if (masterId === '__new') {
-    const newInp = document.getElementById('ing-rev-multi-new');
-    const newName = newInp ? newInp.value.trim() : '';
-    if (!newName) { setStatus('Skriv inn navn på ny standardingrediens.'); return; }
-    masterId = `master_${Date.now()}`;
-    const master = {
-      id: masterId, name: newName, normalizedName: newName.toLowerCase(),
-      role: '', active: true,
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-    };
-    await saveMasterIngredient(master);
-    masterName = newName;
-  } else {
-    const master = state.masterIngredients.find(m => m.id === masterId);
-    if (!master) return;
-    masterName = master.name;
-  }
-  const usageMap = getIngredientUsageMap();
-  const checkedKeys = Object.keys(state.ingRevisionChecked).filter(k => state.ingRevisionChecked[k]);
-  for (const key of checkedKeys) {
-    const entry = usageMap[key];
-    if (!entry) continue;
-    const existing = state.ingredientAliases[key];
-    const alias = {
-      id: existing ? existing.id : `alias_${Date.now()}_${key.replace(/[^a-z0-9]/g,'')}`,
-      aliasName: entry.displayName, normalizedAlias: key,
-      masterIngredientId: masterId, masterIngredientName: masterName,
-      updatedAt: new Date().toISOString()
-    };
-    await saveIngredientAlias(alias);
-  }
-  state.ingRevisionChecked = {};
-  setStatus(`${checkedKeys.length} koblinger lagret.`);
-  setTimeout(() => { state.statusMsg = ''; render(); }, 2000);
+  setStatus('Synonym fjernet.');
+  setTimeout(() => { state.statusMsg = ''; render(); }, 1500);
 }
 
 async function openIngRevision() {
   state.ingRevisionSearch = '';
-  state.ingRevisionFilter = 'unmapped';
-  state.ingRevisionSort = 'count';
-  state.ingRevisionChecked = {};
   state.ingRevisionEditing = null;
+  state.ingRevisionEditCanonical = '';
   state.loading = true;
   render();
-  await Promise.all([loadMasterIngredients(), loadIngredientAliases()]);
+  await loadIngredientAliases();
   state.loading = false;
   state.view = 'ing_revision';
   render();
@@ -2478,6 +2352,7 @@ onAuthStateChanged(auth, async user => {
       loadCustomCategories(),
       loadAppSettings(),
       loadIngredientRoles(),
+      loadIngredientAliases(),
       loadBakeries()
     ]);
     state.loading = false;
@@ -2514,9 +2389,8 @@ Object.assign(window,{
   toggleElementDone, removeElement, moveElement, editElement, cancelEditElement,
   addScanImages, removeScanImage, clearScanBuffer, sendScanBuffer,
   setScaleMode, updateScaleField, updateProductField, commitPlanEdit, commitAnd, printPlan, addProductRow, removeProductRow,
-  openIngRevision, setIngRevFilter, setIngRevSort, toggleIngRevCheck, clearIngRevChecks,
-  startIngRevEdit, cancelIngRevEdit, ingRevMasterChange, ingRevNewNameInput,
-  saveIngRevMapping, removeIngRevMapping, saveIngRevMultiMapping,
+  openIngRevision, startIngRevEdit, cancelIngRevEdit, ingRevCanonChange,
+  saveIngRevMapping, removeIngRevMapping,
   addPart, removePart,
 });
 
