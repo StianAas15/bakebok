@@ -684,6 +684,16 @@ function clearProductTouched(idx) {
   }
 }
 
+// Marker alle produktfelt på et element som "rørt" så all highlight (mangel/feil/ferdig) vises.
+function markAllProductsTouched(idx) {
+  const el = state.activePlan && state.activePlan.elementer[idx];
+  if (!el || !el.produkter) return;
+  el.produkter.forEach((p, pi) => {
+    ['navn', 'antall', 'vektPerStk'].forEach(field =>
+      state.productTouched.add(productTouchKey(idx, pi, field)));
+  });
+}
+
 // Returnerer 'input-incomplete' (tomt felt), 'input-error' (ugyldig tall), eller '' (ok / ikke rørt ennå)
 function productFieldStatus(idx, pi, field, value) {
   if (!isProductFieldTouched(idx, pi, field)) return '';
@@ -790,6 +800,10 @@ function renderPlanElementEditor(el, idx, baseDeigvekt) {
         <div id="product-rows-${idx}">${produktRows}</div>
         <button class="btn" style="margin-top:6px;font-size:12px;padding:4px 10px" onclick="addProductRow(${idx})">+ Legg til produkt</button>
       ` : ''}
+
+      <div class="plan-edit-actions">
+        <button class="btn-primary" onclick="savePlanElement(${idx})">Lagre</button>
+      </div>
     </div>`;
 }
 
@@ -2110,6 +2124,14 @@ function removeProductRow(idx, prodIdx) {
   render();
 }
 
+// "Lagre"-knapp: les inn feltene, vis all highlight umiddelbart, lagre og oppdater oppskriften.
+function savePlanElement(idx) {
+  saveCurrentElementEdits();
+  markAllProductsTouched(idx);
+  savePlan();
+  render();
+}
+
 function saveCurrentElementEdits() {
   if (state.editingElementIdx === null) return;
   const idx = state.editingElementIdx;
@@ -2470,7 +2492,7 @@ Object.assign(window,{
   toggleElementDone, removeElement, moveElement, editElement, cancelEditElement,
   addScanImages, removeScanImage, clearScanBuffer, sendScanBuffer,
   setScaleMode, updateScaleField, updateProductField, commitPlanEdit, commitAnd, printPlan, addProductRow, removeProductRow,
-  onProductFieldInput, onProductFieldBlur,
+  onProductFieldInput, onProductFieldBlur, savePlanElement,
   openIngRevision, startIngRevEdit, cancelIngRevEdit, ingRevCanonChange,
   saveIngRevMapping, removeIngRevMapping,
   addPart, removePart,

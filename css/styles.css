@@ -147,6 +147,8 @@ img.recipe-img { width: 100%; border-radius: 8px; margin-bottom: 8px; }
 .product-row button { border: none; background: transparent; color: #c0392b; cursor: pointer; font-size: 16px; padding: 0; line-height: 1; }
 .product-row.row-complete { border-left-color: #1D9E75; background: #f1faf6; }
 .product-row.row-complete input { border-color: #1D9E75; background: #fff; }
+.plan-edit-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+.plan-edit-actions .btn-primary { padding: 8px 22px; font-size: 13px; }
 .product-row-header { display: grid; grid-template-columns: 1fr 70px 70px 30px; gap: 6px; font-size: 11px; color: #888; margin-bottom: 4px; padding-left: 8px; }
 
 .standard-task-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 0.5px solid #f0f0e8; }
