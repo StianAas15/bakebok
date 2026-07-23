@@ -672,18 +672,66 @@ function renderPlanElement(el, idx, isFrozen) {
     </div>`;
 }
 
+function productTouchKey(idx, pi, field) { return `${idx}_${pi}_${field}`; }
+
+function isProductFieldTouched(idx, pi, field) {
+  return state.productTouched.has(productTouchKey(idx, pi, field));
+}
+
+function clearProductTouched(idx) {
+  for (const key of Array.from(state.productTouched)) {
+    if (key.startsWith(`${idx}_`)) state.productTouched.delete(key);
+  }
+}
+
+// Returnerer 'input-incomplete' (tomt felt), 'input-error' (ugyldig tall), eller '' (ok / ikke rørt ennå)
+function productFieldStatus(idx, pi, field, value) {
+  if (!isProductFieldTouched(idx, pi, field)) return '';
+  const v = (value || '').toString().trim();
+  if (v === '') return 'input-incomplete';
+  if ((field === 'antall' || field === 'vektPerStk') && !hasNumberValue(v)) return 'input-error';
+  return '';
+}
+
+function applyProductFieldValidationClass(inputEl, idx, pi, field) {
+  if (!inputEl) return;
+  inputEl.classList.remove('input-incomplete', 'input-error');
+  const status = productFieldStatus(idx, pi, field, inputEl.value);
+  if (status) inputEl.classList.add(status);
+}
+
+function onProductFieldInput(inputEl, idx, pi, field, value) {
+  updateProductField(idx, pi, field, value);
+  // Kun oppdater highlight live hvis feltet allerede er "rørt" (blur skjedd minst én gang)
+  if (isProductFieldTouched(idx, pi, field)) applyProductFieldValidationClass(inputEl, idx, pi, field);
+}
+
+function onProductFieldBlur(inputEl, idx, pi, field) {
+  state.productTouched.add(productTouchKey(idx, pi, field));
+  applyProductFieldValidationClass(inputEl, idx, pi, field);
+}
+
+function renderProductRow(idx, pi, p) {
+  const navnClass = productFieldStatus(idx, pi, 'navn', p.navn);
+  const antallClass = productFieldStatus(idx, pi, 'antall', p.antall);
+  const vektClass = productFieldStatus(idx, pi, 'vektPerStk', p.vektPerStk);
+  return `
+    <div class="product-row">
+      <input type="text" id="prod-navn-${idx}-${pi}" class="prod-navn ${navnClass}" data-idx="${pi}" placeholder="Navn (f.eks. Loff)" value="${p.navn || ''}"
+        oninput="onProductFieldInput(this, ${idx}, ${pi}, 'navn', this.value)" onblur="onProductFieldBlur(this, ${idx}, ${pi}, 'navn')">
+      <input type="text" id="prod-antall-${idx}-${pi}" class="prod-antall ${antallClass}" data-idx="${pi}" placeholder="Antall" value="${p.antall || ''}"
+        oninput="onProductFieldInput(this, ${idx}, ${pi}, 'antall', this.value)" onblur="onProductFieldBlur(this, ${idx}, ${pi}, 'antall')">
+      <input type="text" id="prod-vekt-${idx}-${pi}" class="prod-vekt ${vektClass}" data-idx="${pi}" placeholder="g/stk" value="${p.vektPerStk || ''}"
+        oninput="onProductFieldInput(this, ${idx}, ${pi}, 'vektPerStk', this.value)" onblur="onProductFieldBlur(this, ${idx}, ${pi}, 'vektPerStk')">
+      <button onclick="removeProductRow(${idx}, ${pi})" title="Fjern">×</button>
+    </div>`;
+}
+
 function renderPlanElementEditor(el, idx, baseDeigvekt) {
   const mode = el.skaleringMode || 'faktor';
   const produkter = el.produkter || [{ navn: '', antall: '', vektPerStk: '' }];
 
- const produktRows = produkter.map((p, pi) => `
-    <div class="product-row">
-      <input type="text" class="prod-navn" data-idx="${pi}" placeholder="Navn (f.eks. Loff)" value="${p.navn || ''}" oninput="updateProductField(${idx}, ${pi}, 'navn', this.value)">
-      <input type="text" class="prod-antall" data-idx="${pi}" placeholder="Antall" value="${p.antall || ''}" oninput="updateProductField(${idx}, ${pi}, 'antall', this.value)">
-      <input type="text" class="prod-vekt" data-idx="${pi}" placeholder="g/stk" value="${p.vektPerStk || ''}" oninput="updateProductField(${idx}, ${pi}, 'vektPerStk', this.value)">
-      <button onclick="removeProductRow(${idx}, ${pi})" title="Fjern">×</button>
-    </div>
-  `).join('');
+  const produktRows = produkter.map((p, pi) => renderProductRow(idx, pi, p)).join('');
 
   return `
     <div class="plan-recipe-edit no-print">
@@ -699,13 +747,7 @@ function renderPlanElementEditor(el, idx, baseDeigvekt) {
         const prods = el.produkter || [];
         const brukt = Math.round(prods.reduce((s, p) => s + asNumber(p.antall) * asNumber(p.vektPerStk), 0));
         const rest = totalDeig - brukt;
-        const prodRows = prods.map((p, pi) => `
-          <div class="product-row">
-            <input type="text" class="prod-navn" placeholder="Navn (f.eks. Baguett)" value="${p.navn||''}" oninput="updateProductField(${idx},${pi},'navn',this.value)">
-            <input type="text" class="prod-antall" placeholder="Antall" value="${p.antall||''}" oninput="updateProductField(${idx},${pi},'antall',this.value)">
-            <input type="text" class="prod-vekt" placeholder="g/stk" value="${p.vektPerStk||''}" oninput="updateProductField(${idx},${pi},'vektPerStk',this.value)">
-            <button onclick="removeProductRow(${idx},${pi})" title="Fjern">×</button>
-          </div>`).join('');
+        const prodRows = prods.map((p, pi) => renderProductRow(idx, pi, p)).join('');
         return `
         <label>Multipliser grunnoppskriftens deigvekt (${baseDeigvekt > 0 ? Math.round(baseDeigvekt) : '?'} g) med</label>
         <input type="text" id="scale-faktor-${idx}" value="${el.faktor || ''}" placeholder="F.eks. 1,5" oninput="updateScaleField(${idx}, 'faktor', this.value)" onblur="commitPlanEdit()">
@@ -1980,11 +2022,13 @@ function editElement(idx) {
   if (el.skaleringMode === 'produkter' && (!el.produkter || el.produkter.length === 0)) {
     el.produkter = [{ navn: '', antall: '', vektPerStk: '' }];
   }
+  clearProductTouched(idx);
   render();
 }
 
 function cancelEditElement() {
   saveCurrentElementEdits();
+  clearProductTouched(state.editingElementIdx);
   state.editingElementIdx = null;
   savePlan();
   render();
@@ -1999,6 +2043,7 @@ function setScaleMode(idx, mode) {
     el.produkter = [{ navn: '', antall: '', vektPerStk: '' }];
   }
   if (mode === 'faktor' && !el.faktor) el.faktor = 1;
+  clearProductTouched(idx);
   render();
 }
 
@@ -2019,7 +2064,13 @@ function addProductRow(idx) {
   if (!state.activePlan || !state.activePlan.elementer[idx]) return;
   if (!state.activePlan.elementer[idx].produkter) state.activePlan.elementer[idx].produkter = [];
   state.activePlan.elementer[idx].produkter.push({ navn: '', antall: '', vektPerStk: '' });
+  const newPi = state.activePlan.elementer[idx].produkter.length - 1;
+  clearProductTouched(idx);
   render();
+  setTimeout(() => {
+    const navnEl = document.getElementById(`prod-navn-${idx}-${newPi}`);
+    if (navnEl) navnEl.focus();
+  }, 50);
 }
 
 function removeProductRow(idx, prodIdx) {
@@ -2027,6 +2078,7 @@ function removeProductRow(idx, prodIdx) {
   if (!state.activePlan || !state.activePlan.elementer[idx]) return;
   const prods = state.activePlan.elementer[idx].produkter || [];
   prods.splice(prodIdx, 1);
+  clearProductTouched(idx);
   savePlan();
   render();
 }
@@ -2391,6 +2443,7 @@ Object.assign(window,{
   toggleElementDone, removeElement, moveElement, editElement, cancelEditElement,
   addScanImages, removeScanImage, clearScanBuffer, sendScanBuffer,
   setScaleMode, updateScaleField, updateProductField, commitPlanEdit, commitAnd, printPlan, addProductRow, removeProductRow,
+  onProductFieldInput, onProductFieldBlur,
   openIngRevision, startIngRevEdit, cancelIngRevEdit, ingRevCanonChange,
   saveIngRevMapping, removeIngRevMapping,
   addPart, removePart,

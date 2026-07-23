@@ -37,6 +37,7 @@ export const state = {
   priceListSearch: '',
   editingPriceName: null,
   validationErrors: {},
+  productTouched: new Set(),
 };
 
 // =====================================================================
