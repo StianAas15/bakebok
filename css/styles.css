@@ -66,6 +66,7 @@ img.recipe-img { width: 100%; border-radius: 8px; margin-bottom: 8px; }
 .role-search { margin-bottom: 12px; }
 .role-list { max-height: 400px; overflow-y: auto; padding-right: 4px; }
 .input-error { border-color: #c0392b !important; background: #fef5f4 !important; }
+.input-incomplete { border-color: #d68910 !important; background: #fff8e6 !important; }
 .bakepct-summary { font-size: 13px; color: #555; padding: 8px 12px; background: #f0f0e8; border-radius: 8px; margin-bottom: 12px; line-height: 1.7; }
 .bakepct-summary .pct-label { color: #888; }
 .bakepct-summary .pct-val { font-weight: 600; color: #1a1a1a; margin-right: 12px; }
