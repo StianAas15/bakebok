@@ -2217,7 +2217,8 @@ Regler:
 - Hver ingrediens: mengde (tall eller null), enhet (string), navn (string), merknad (string).
 - Bruk null for mengde hvis ikke spesifisert. Tom streng "" for felt som ikke gjelder.
 - Vanlige enheter: g, kg, ml, dl, l, ts, ss, stk, pakke, knivsodd.
-- Beskrivelser som "romtemperert", "finhakket" legges i merknad.
+- VIKTIG om navnet: ord som bestemmer hvilken råvare det ER, skal med i "navn" – også hvis de står i parentes i oppskriften. Dette gjelder f.eks. grov, fin, grovmalt, finmalt, sammalt, siktet, mørk, lys, hel, knust. Eksempel: "sammalt rug (grov)" -> navn: "sammalt rug grov". "hvetemel (siktet)" -> navn: "siktet hvetemel". Ikke bruk parenteser i navnet.
+- Merknad er kun for tilberedning/servering/mengde-notat, f.eks. "romtemperert", "finhakket", "etter smak", "0,4 dl". Slikt skal IKKE i navnet.
 
 Svar KUN med JSON, ingen annen tekst.`;
   try {
@@ -2285,7 +2286,8 @@ Regler:
 - Hver ingrediens: mengde (tall eller null), enhet (string), navn (string), merknad (string).
 - Bruk null for mengde hvis ikke spesifisert. Tom streng "" for felt som ikke gjelder.
 - Vanlige enheter: g, kg, ml, dl, l, ts, ss, stk, pakke, knivsodd.
-- Beskrivelser som "romtemperert", "finhakket" legges i merknad.
+- VIKTIG om navnet: ord som bestemmer hvilken råvare det ER, skal med i "navn" – også hvis de står i parentes i oppskriften. Dette gjelder f.eks. grov, fin, grovmalt, finmalt, sammalt, siktet, mørk, lys, hel, knust. Eksempel: "sammalt rug (grov)" -> navn: "sammalt rug grov". "hvetemel (siktet)" -> navn: "siktet hvetemel". Ikke bruk parenteser i navnet.
+- Merknad er kun for tilberedning/servering/mengde-notat, f.eks. "romtemperert", "finhakket", "etter smak", "0,4 dl". Slikt skal IKKE i navnet.
 
 Svar KUN med JSON, ingen annen tekst.`;
   try {
