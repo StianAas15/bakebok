@@ -693,6 +693,14 @@ function productFieldStatus(idx, pi, field, value) {
   return '';
 }
 
+// En rad er "ferdig" når navn er fylt ut og antall + g/stk er gyldige tall > 0.
+function isProductRowComplete(p) {
+  if (!p) return false;
+  return (p.navn || '').toString().trim() !== '' &&
+    hasNumberValue(p.antall) && asNumber(p.antall) > 0 &&
+    hasNumberValue(p.vektPerStk) && asNumber(p.vektPerStk) > 0;
+}
+
 function applyProductFieldValidationClass(inputEl, idx, pi, field) {
   if (!inputEl) return;
   inputEl.classList.remove('input-incomplete', 'input-error');
@@ -700,23 +708,38 @@ function applyProductFieldValidationClass(inputEl, idx, pi, field) {
   if (status) inputEl.classList.add(status);
 }
 
+// Sett/fjern grønn "ferdig"-markering på hele raden (positiv bekreftelse, vises live).
+function updateRowCompleteClass(idx, pi) {
+  const navnEl = document.getElementById(`prod-navn-${idx}-${pi}`);
+  const rowEl = navnEl ? navnEl.closest('.product-row') : null;
+  if (!rowEl) return;
+  const p = state.activePlan && state.activePlan.elementer[idx]
+    ? (state.activePlan.elementer[idx].produkter || [])[pi] : null;
+  if (isProductRowComplete(p)) rowEl.classList.add('row-complete');
+  else rowEl.classList.remove('row-complete');
+}
+
 function onProductFieldInput(inputEl, idx, pi, field, value) {
   updateProductField(idx, pi, field, value);
-  // Kun oppdater highlight live hvis feltet allerede er "rørt" (blur skjedd minst én gang)
+  // Feil/mangel-highlight vises kun live hvis feltet allerede er "rørt" (blur skjedd minst én gang).
   if (isProductFieldTouched(idx, pi, field)) applyProductFieldValidationClass(inputEl, idx, pi, field);
+  // Grønn "ferdig"-markering er positiv og oppdateres alltid live.
+  updateRowCompleteClass(idx, pi);
 }
 
 function onProductFieldBlur(inputEl, idx, pi, field) {
   state.productTouched.add(productTouchKey(idx, pi, field));
   applyProductFieldValidationClass(inputEl, idx, pi, field);
+  updateRowCompleteClass(idx, pi);
 }
 
 function renderProductRow(idx, pi, p) {
   const navnClass = productFieldStatus(idx, pi, 'navn', p.navn);
   const antallClass = productFieldStatus(idx, pi, 'antall', p.antall);
   const vektClass = productFieldStatus(idx, pi, 'vektPerStk', p.vektPerStk);
+  const rowClass = isProductRowComplete(p) ? 'row-complete' : '';
   return `
-    <div class="product-row">
+    <div class="product-row ${rowClass}">
       <input type="text" id="prod-navn-${idx}-${pi}" class="prod-navn ${navnClass}" data-idx="${pi}" placeholder="Navn (f.eks. Loff)" value="${p.navn || ''}"
         oninput="onProductFieldInput(this, ${idx}, ${pi}, 'navn', this.value)" onblur="onProductFieldBlur(this, ${idx}, ${pi}, 'navn')">
       <input type="text" id="prod-antall-${idx}-${pi}" class="prod-antall ${antallClass}" data-idx="${pi}" placeholder="Antall" value="${p.antall || ''}"
@@ -2065,12 +2088,16 @@ function addProductRow(idx) {
   if (!state.activePlan.elementer[idx].produkter) state.activePlan.elementer[idx].produkter = [];
   state.activePlan.elementer[idx].produkter.push({ navn: '', antall: '', vektPerStk: '' });
   const newPi = state.activePlan.elementer[idx].produkter.length - 1;
-  clearProductTouched(idx);
+  // Behold "rørt"-status på eksisterende rader så highlight ikke forsvinner når en ny rad legges til.
   render();
-  setTimeout(() => {
+  // Fokuser Navn-feltet på den nye raden. render() bytter innerHTML synkront, så elementet finnes nå.
+  const focusNewNavn = () => {
     const navnEl = document.getElementById(`prod-navn-${idx}-${newPi}`);
     if (navnEl) navnEl.focus();
-  }, 50);
+  };
+  focusNewNavn();
+  // Fallback hvis en samtidig re-render skulle stjele fokus rett etterpå.
+  requestAnimationFrame(focusNewNavn);
 }
 
 function removeProductRow(idx, prodIdx) {
